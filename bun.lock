@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "dataentry-backend",
+      "name": "veone-production-backend",
       "dependencies": {
         "@nestjs/common": "^10.4.0",
         "@nestjs/config": "^3.2.3",
