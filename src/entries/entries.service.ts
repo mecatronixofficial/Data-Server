@@ -30,10 +30,14 @@ export class EntriesService {
     const total2 = b8 + b9 + b10;
     const field1Total = applyOperator(total1, total2, dto.operator1);
 
-    const [c1, c2, c3, c4, c5, c6] = dto.field2Boxes;
-    const total3 = c1 + c2 + c3 + c4;
-    const total4 = c5 + c6;
-    const field2Total = applyOperator(total3, total4, dto.operator2);
+    // Field 2 groups all six values by sign, regardless of box position.
+    const total3 = dto.field2Boxes
+      .filter((value) => value > 0)
+      .reduce((total, value) => total + value, 0);
+    const total4 = dto.field2Boxes
+      .filter((value) => value < 0)
+      .reduce((total, value) => total + value, 0);
+    const field2Total = total3 + total4;
 
     const finalTotal = applyOperator(field1Total, field2Total, dto.operator3);
 
@@ -55,7 +59,7 @@ export class EntriesService {
       field1Boxes: dto.field1Boxes,
       operator1: dto.operator1,
       field2Boxes: dto.field2Boxes,
-      operator2: dto.operator2,
+      operator2: '+',
       operator3: dto.operator3,
       ...computed,
       createdBy: new Types.ObjectId(userId),
@@ -127,9 +131,8 @@ export class EntriesService {
       { header: 'Operator 1', key: 'operator1', width: 10 },
       { header: 'Field 1 Total', key: 'field1Total', width: 12 },
       { header: 'Field 2 Boxes', key: 'field2Boxes', width: 20 },
-      { header: 'Total 3', key: 'total3', width: 10 },
-      { header: 'Total 4', key: 'total4', width: 10 },
-      { header: 'Operator 2', key: 'operator2', width: 10 },
+      { header: 'Positive Total', key: 'total3', width: 14 },
+      { header: 'Negative Total', key: 'total4', width: 14 },
       { header: 'Field 2 Total', key: 'field2Total', width: 12 },
       { header: 'Operator 3', key: 'operator3', width: 10 },
       { header: 'Final Total', key: 'finalTotal', width: 12 },
@@ -149,7 +152,6 @@ export class EntriesService {
         field2Boxes: e.field2Boxes.join(', '),
         total3: e.total3,
         total4: e.total4,
-        operator2: e.operator2,
         field2Total: e.field2Total,
         operator3: e.operator3,
         finalTotal: e.finalTotal,

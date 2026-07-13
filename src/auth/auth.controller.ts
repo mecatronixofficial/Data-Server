@@ -32,10 +32,12 @@ export class AuthController {
   }
 
   private googleCallbackUrl() {
-    return (
+    const callbackUrl = (
       process.env.GOOGLE_CALLBACK_URL ||
       `${this.frontendUrl()}/api/auth/google/callback`
     );
+
+    return callbackUrl.trim().replace(/\/$/, '');
   }
 
   private setAuthCookies(res: Response, accessToken: string, refreshToken: string) {

@@ -32,11 +32,12 @@ export class Entry {
   field2Boxes: number[];
 
   @Prop({ required: true })
-  total3: number; // sum of boxes 1-4
+  total3: number; // sum of all positive Field 2 values
 
   @Prop({ required: true })
-  total4: number; // sum of boxes 5-6
+  total4: number; // sum of all negative Field 2 values
 
+  // Retained for compatibility with existing records; Field 2 always uses addition.
   @Prop({ required: true, enum: ['+', '-', '*', '/'], default: '+' })
   operator2: string;
 
