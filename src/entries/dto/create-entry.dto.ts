@@ -14,6 +14,12 @@ export class CreateEntryDto {
   @IsNumber({}, { each: true })
   field1Boxes: number[];
 
+  @IsArray()
+  @ArrayMinSize(10)
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  field1BoxNames: string[];
+
   @IsIn(['+', '-', '*', '/'])
   operator1: string;
 
@@ -22,6 +28,12 @@ export class CreateEntryDto {
   @ArrayMaxSize(6)
   @IsNumber({}, { each: true })
   field2Boxes: number[];
+
+  @IsArray()
+  @ArrayMinSize(6)
+  @ArrayMaxSize(6)
+  @IsString({ each: true })
+  field2BoxNames: string[];
 
   @IsIn(['+', '-', '*', '/'])
   operator2: string;

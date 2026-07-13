@@ -15,6 +15,9 @@ export class Entry {
   @Prop({ type: [Number], required: true })
   field1Boxes: number[];
 
+  @Prop({ type: [String], required: true })
+  field1BoxNames: string[];
+
   @Prop({ required: true })
   total1: number; // sum of boxes 1-7
 
@@ -30,6 +33,9 @@ export class Entry {
   // Field 2: 6 boxes
   @Prop({ type: [Number], required: true })
   field2Boxes: number[];
+
+  @Prop({ type: [String], required: true })
+  field2BoxNames: string[];
 
   @Prop({ required: true })
   total3: number; // sum of all positive Field 2 values
