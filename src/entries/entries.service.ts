@@ -4,6 +4,11 @@ import { Model, Types } from 'mongoose';
 import * as ExcelJS from 'exceljs';
 import { Entry, EntryDocument } from './entry.schema';
 import { CreateEntryDto } from './dto/create-entry.dto';
+import { UpdateBoxNamesDto } from './dto/update-box-names.dto';
+import { BoxNames, BoxNamesDocument } from './box-names.schema';
+
+const DEFAULT_FIELD_1_NAMES = Array.from({ length: 10 }, (_, index) => `Box ${index + 1}`);
+const DEFAULT_FIELD_2_NAMES = Array.from({ length: 6 }, (_, index) => `Box ${index + 1}`);
 
 function applyOperator(a: number, b: number, op: string) {
   switch (op) {
@@ -20,7 +25,31 @@ function applyOperator(a: number, b: number, op: string) {
 
 @Injectable()
 export class EntriesService {
-  constructor(@InjectModel(Entry.name) private entryModel: Model<EntryDocument>) {}
+  constructor(
+    @InjectModel(Entry.name) private entryModel: Model<EntryDocument>,
+    @InjectModel(BoxNames.name) private boxNamesModel: Model<BoxNamesDocument>,
+  ) {}
+
+  async getBoxNames() {
+    const settings = await this.boxNamesModel.findOne({ key: 'global' }).lean();
+    return settings || {
+      field1BoxNames: DEFAULT_FIELD_1_NAMES,
+      field2BoxNames: DEFAULT_FIELD_2_NAMES,
+    };
+  }
+
+  async updateBoxNames(dto: UpdateBoxNamesDto) {
+    const normalize = (names: string[]) => names.map((name, index) => name.trim() || `Box ${index + 1}`);
+    return this.boxNamesModel.findOneAndUpdate(
+      { key: 'global' },
+      {
+        key: 'global',
+        field1BoxNames: normalize(dto.field1BoxNames),
+        field2BoxNames: normalize(dto.field2BoxNames),
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+  }
 
   // The backend always recomputes totals itself from raw boxes + operators.
   // Client-submitted totals (if any) are ignored entirely.
@@ -58,9 +87,11 @@ export class EntriesService {
       date: new Date(dto.date),
       field1Boxes: dto.field1Boxes,
       field1BoxNames: dto.field1BoxNames.map((name, index) => name.trim() || `Box ${index + 1}`),
+      field1Details: dto.field1Details || [],
       operator1: dto.operator1,
       field2Boxes: dto.field2Boxes,
       field2BoxNames: dto.field2BoxNames.map((name, index) => name.trim() || `Box ${index + 1}`),
+      field2Details: dto.field2Details || [],
       operator2: '+',
       operator3: dto.operator3,
       ...computed,
@@ -96,13 +127,49 @@ export class EntriesService {
 
   async findAll(query: { name?: string; startDate?: string; endDate?: string }) {
     const filter = this.buildFilter(query);
-    return this.entryModel.find(filter).populate('createdBy', 'name email').sort({ date: -1 });
+    return this.entryModel.find(filter).populate('createdBy', 'name email').sort({ updatedAt: -1 });
   }
 
   async findOne(id: string) {
     const entry = await this.entryModel.findById(id).populate('createdBy', 'name email');
     if (!entry) throw new NotFoundException('Entry not found');
     return entry;
+  }
+
+  async update(id: string, dto: CreateEntryDto) {
+    const normalizedName = dto.name.trim();
+    const duplicate = await this.entryModel.findOne({
+      _id: { $ne: id },
+      name: { $regex: `^${normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+    });
+    if (duplicate) throw new ConflictException('An entry with this name already exists');
+
+    const entry = await this.entryModel.findById(id);
+    if (!entry) throw new NotFoundException('Entry not found');
+
+    entry.set({
+      name: normalizedName,
+      date: new Date(dto.date),
+      field1Boxes: dto.field1Boxes,
+      field1BoxNames: dto.field1BoxNames.map((name, index) => name.trim() || `Box ${index + 1}`),
+      field1Details: dto.field1Details || [],
+      operator1: dto.operator1,
+      field2Boxes: dto.field2Boxes,
+      field2BoxNames: dto.field2BoxNames.map((name, index) => name.trim() || `Box ${index + 1}`),
+      field2Details: dto.field2Details || [],
+      operator2: '+',
+      operator3: dto.operator3,
+      ...this.computeTotals(dto),
+    });
+
+    try {
+      return await entry.save();
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        throw new ConflictException('An entry with this name already exists');
+      }
+      throw error;
+    }
   }
 
   async remove(id: string, requesterRole: string) {
