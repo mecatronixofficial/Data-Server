@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   Delete,
@@ -16,6 +17,7 @@ import { RolesGuard } from '../common/roles.guard';
 import { Roles } from '../common/roles.decorator';
 import { EntriesService } from './entries.service';
 import { CreateEntryDto } from './dto/create-entry.dto';
+import { UpdateBoxNamesDto } from './dto/update-box-names.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('entries')
@@ -25,6 +27,17 @@ export class EntriesController {
   @Post()
   create(@Body() dto: CreateEntryDto, @Req() req: any) {
     return this.entriesService.create(dto, req.user.sub);
+  }
+
+  @Get('box-names')
+  getBoxNames() {
+    return this.entriesService.getBoxNames();
+  }
+
+  @Put('box-names')
+  @Roles('superadmin')
+  updateBoxNames(@Body() dto: UpdateBoxNamesDto) {
+    return this.entriesService.updateBoxNames(dto);
   }
 
   @Get('me')
@@ -59,7 +72,13 @@ export class EntriesController {
     return this.entriesService.findOne(id);
   }
 
-  @Roles('admin', 'superadmin')
+  @Put(':id')
+  @Roles('superadmin')
+  update(@Param('id') id: string, @Body() dto: CreateEntryDto) {
+    return this.entriesService.update(id, dto);
+  }
+
+  @Roles('superadmin')
   @Delete(':id')
   remove(@Param('id') id: string, @Req() req: any) {
     return this.entriesService.remove(id, req.user.role);

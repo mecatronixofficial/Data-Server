@@ -1,4 +1,4 @@
-import { IsArray, IsDateString, IsIn, IsNotEmpty, IsNumber, IsString, ArrayMinSize, ArrayMaxSize } from 'class-validator';
+import { IsArray, IsDateString, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, ArrayMinSize, ArrayMaxSize } from 'class-validator';
 
 export class CreateEntryDto {
   @IsNotEmpty()
@@ -20,6 +20,10 @@ export class CreateEntryDto {
   @IsString({ each: true })
   field1BoxNames: string[];
 
+  @IsOptional()
+  @IsArray()
+  field1Details?: Array<Array<{ name: string; value: number }>>;
+
   @IsIn(['+', '-', '*', '/'])
   operator1: string;
 
@@ -34,6 +38,10 @@ export class CreateEntryDto {
   @ArrayMaxSize(6)
   @IsString({ each: true })
   field2BoxNames: string[];
+
+  @IsOptional()
+  @IsArray()
+  field2Details?: Array<Array<{ name: string; value: number }>>;
 
   @IsIn(['+', '-', '*', '/'])
   operator2: string;

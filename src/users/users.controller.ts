@@ -10,13 +10,13 @@ import { CreateUserDto } from './dto/create-user.dto';
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
-  @Roles('admin', 'superadmin')
+  @Roles('superadmin')
   @Get()
   findAll() {
     return this.usersService.findAll();
   }
 
-  @Roles('admin', 'superadmin')
+  @Roles('superadmin')
   @Post()
   create(@Body() dto: CreateUserDto, @Req() req: any) {
     return this.usersService.create(dto, req.user.role, req.user.sub);
