@@ -49,4 +49,12 @@ export class UsersService {
     if (!deleted) throw new NotFoundException('User not found');
     return { message: 'User removed' };
   }
+
+  async updatePassword(id: string, newPassword: string) {
+    const user = await this.userModel.findById(id);
+    if (!user) throw new NotFoundException('User not found');
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+    return { message: 'Password updated' };
+  }
 }

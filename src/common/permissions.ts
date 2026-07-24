@@ -6,6 +6,7 @@ export const PERMISSION_KEYS = [
   'manageFields',
   'viewAllReports',
   'manageReports',
+  'manageReportSettings',
   'canCreateEntries',
 ] as const;
 
@@ -20,6 +21,7 @@ const ROLE_PERMISSIONS: Record<RoleName, Record<PermissionKey, boolean>> = {
     manageFields: false,
     viewAllReports: false,
     manageReports: false,
+    manageReportSettings: false,
     canCreateEntries: true,
   },
   admin: {
@@ -27,6 +29,7 @@ const ROLE_PERMISSIONS: Record<RoleName, Record<PermissionKey, boolean>> = {
     manageFields: false,
     viewAllReports: true,
     manageReports: true,
+    manageReportSettings: false,
     canCreateEntries: true,
   },
   superadmin: {
@@ -34,6 +37,7 @@ const ROLE_PERMISSIONS: Record<RoleName, Record<PermissionKey, boolean>> = {
     manageFields: true,
     viewAllReports: true,
     manageReports: true,
+    manageReportSettings: true,
     canCreateEntries: false,
   },
 };
@@ -43,6 +47,7 @@ const EMPTY_PERMISSIONS: Record<PermissionKey, boolean> = {
   manageFields: false,
   viewAllReports: false,
   manageReports: false,
+  manageReportSettings: false,
   canCreateEntries: false,
 };
 
