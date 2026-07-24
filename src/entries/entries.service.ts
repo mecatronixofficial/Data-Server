@@ -12,7 +12,6 @@ import { Entry, EntryDocument, EntryField } from './entry.schema';
 import { CreateEntryDto, EntryFieldInputDto } from './dto/create-entry.dto';
 import { FieldsService } from '../fields/fields.service';
 import { Field } from '../fields/field.schema';
-import { PermissionKey } from '../common/permissions';
 
 function sum(nums: number[]) {
   return nums.reduce((total, value) => total + value, 0);
@@ -39,21 +38,15 @@ export class EntriesService {
   ) {}
 
   // Field names/box counts always come from the live Field config (server-trusted),
-  // never from client-submitted names, to stop a user from forging inaccessible fields.
-  private async resolveFields(
-    inputs: EntryFieldInputDto[],
-    requesterRole: string,
-    requesterPermissions: Record<PermissionKey, boolean>,
-  ) {
-    const canonical: Field[] = requesterPermissions?.manageReports
-      ? await this.fieldsService.findAll()
-      : await this.fieldsService.findForRole(requesterRole);
+  // never from client-submitted names.
+  private async resolveFields(inputs: EntryFieldInputDto[]) {
+    const canonical: Field[] = await this.fieldsService.findAll();
     const canonicalByName = new Map(canonical.map((field) => [field.name, field]));
 
     const fields: EntryField[] = inputs.map((input) => {
       const field = canonicalByName.get(input.name.trim());
       if (!field) {
-        throw new ForbiddenException(`Field "${input.name}" is not available to your role`);
+        throw new ForbiddenException(`Field "${input.name}" does not exist`);
       }
       if (input.boxes.length !== field.boxNames.length) {
         throw new BadRequestException(`Field "${field.name}" expects ${field.boxNames.length} boxes`);
@@ -108,19 +101,14 @@ export class EntriesService {
     return fields.slice(1).reduce((acc, field, index) => applyOperator(acc, field.total, fieldOperators[index]), fields[0].total);
   }
 
-  async create(
-    dto: CreateEntryDto,
-    userId: string,
-    requesterRole: string,
-    requesterPermissions: Record<PermissionKey, boolean>,
-  ) {
+  async create(dto: CreateEntryDto, userId: string) {
     const normalizedName = dto.name.trim();
     const existing = await this.entryModel.findOne({
       name: { $regex: `^${normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
     });
     if (existing) throw new ConflictException('An entry with this name already exists');
 
-    const fields = await this.resolveFields(dto.fields, requesterRole, requesterPermissions);
+    const fields = await this.resolveFields(dto.fields);
     const finalTotal = this.combineTotals(fields, dto.fieldOperators);
 
     const created = new this.entryModel({
@@ -161,21 +149,23 @@ export class EntriesService {
 
   async findAll(query: { name?: string; startDate?: string; endDate?: string }) {
     const filter = this.buildFilter(query);
-    return this.entryModel.find(filter).populate('createdBy', 'name email').sort({ updatedAt: -1 });
+    return this.entryModel
+      .find(filter)
+      .populate('createdBy', 'name email')
+      .populate('updatedBy', 'name email')
+      .sort({ updatedAt: -1 });
   }
 
   async findOne(id: string) {
-    const entry = await this.entryModel.findById(id).populate('createdBy', 'name email');
+    const entry = await this.entryModel
+      .findById(id)
+      .populate('createdBy', 'name email')
+      .populate('updatedBy', 'name email');
     if (!entry) throw new NotFoundException('Entry not found');
     return entry;
   }
 
-  async update(
-    id: string,
-    dto: CreateEntryDto,
-    requesterRole: string,
-    requesterPermissions: Record<PermissionKey, boolean>,
-  ) {
+  async update(id: string, dto: CreateEntryDto, userId: string) {
     const normalizedName = dto.name.trim();
     const duplicate = await this.entryModel.findOne({
       _id: { $ne: id },
@@ -186,7 +176,7 @@ export class EntriesService {
     const entry = await this.entryModel.findById(id);
     if (!entry) throw new NotFoundException('Entry not found');
 
-    const fields = await this.resolveFields(dto.fields, requesterRole, requesterPermissions);
+    const fields = await this.resolveFields(dto.fields);
     const finalTotal = this.combineTotals(fields, dto.fieldOperators);
 
     entry.set({
@@ -195,16 +185,18 @@ export class EntriesService {
       fields,
       fieldOperators: fields.length > 1 ? dto.fieldOperators : [],
       finalTotal,
+      updatedBy: new Types.ObjectId(userId),
     });
 
     try {
-      return await entry.save();
+      await entry.save();
     } catch (error: any) {
       if (error?.code === 11000) {
         throw new ConflictException('An entry with this name already exists');
       }
       throw error;
     }
+    return entry.populate(['createdBy', 'updatedBy'].map((path) => ({ path, select: 'name email' })));
   }
 
   async remove(id: string) {
@@ -218,6 +210,7 @@ export class EntriesService {
     const entries = await this.entryModel
       .find(filter)
       .populate('createdBy', 'name email')
+      .populate('updatedBy', 'name email')
       .sort({ date: -1 });
 
     const workbook = new ExcelJS.Workbook();
@@ -237,6 +230,7 @@ export class EntriesService {
     columns.push({ header: 'Field Operators', key: 'fieldOperators', width: 16 });
     columns.push({ header: 'Final Total', key: 'finalTotal', width: 12 });
     columns.push({ header: 'Created By', key: 'createdBy', width: 20 });
+    columns.push({ header: 'Updated By', key: 'updatedBy', width: 20 });
     sheet.columns = columns;
     sheet.getRow(1).font = { bold: true };
 
@@ -247,6 +241,7 @@ export class EntriesService {
         fieldOperators: e.fieldOperators.join(' '),
         finalTotal: e.finalTotal,
         createdBy: (e.createdBy as any)?.name || '',
+        updatedBy: (e.updatedBy as any)?.name || '',
       };
       e.fields.forEach((field, index) => {
         row[`field${index}Name`] = field.name;

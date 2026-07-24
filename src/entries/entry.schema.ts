@@ -70,6 +70,10 @@ export class Entry {
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId;
+
+  // Set on update() only — absent for entries that have never been edited.
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy?: Types.ObjectId;
 }
 
 export const EntrySchema = SchemaFactory.createForClass(Entry);
