@@ -14,10 +14,6 @@ export class Field {
   @Prop({ type: [String], required: true })
   boxNames: string[];
 
-  // Role names allowed to view/fill this field on the entry form. Empty = everyone.
-  @Prop({ type: [String], default: [] })
-  roles: string[];
-
   // Icon key shown next to the field name (see ICON_KEYS in fields.service.ts).
   @Prop({ default: '' })
   icon: string;

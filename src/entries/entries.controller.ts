@@ -26,7 +26,7 @@ export class EntriesController {
   @RequirePermissions('canCreateEntries')
   @Post()
   create(@Body() dto: CreateEntryDto, @Req() req: any) {
-    return this.entriesService.create(dto, req.user.sub, req.user.role, req.user.permissions);
+    return this.entriesService.create(dto, req.user.sub);
   }
 
   @RequirePermissions('canCreateEntries')
@@ -78,7 +78,7 @@ export class EntriesController {
   @RequirePermissions('manageReports')
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: CreateEntryDto, @Req() req: any) {
-    return this.entriesService.update(id, dto, req.user.role, req.user.permissions);
+    return this.entriesService.update(id, dto, req.user.sub);
   }
 
   @RequirePermissions('manageReports')

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../common/permissions.guard';
 import { RequirePermissions } from '../common/permissions.decorator';
@@ -17,8 +17,8 @@ export class FieldsController {
   }
 
   @Get('mine')
-  findMine(@Req() req: any) {
-    return this.fieldsService.findForRole(req.user.role);
+  findMine() {
+    return this.fieldsService.findAll();
   }
 
   @RequirePermissions('manageFields')

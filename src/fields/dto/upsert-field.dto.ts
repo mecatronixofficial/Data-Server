@@ -16,11 +16,6 @@ export class UpsertFieldDto {
   boxNames: string[];
 
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  roles?: string[];
-
-  @IsOptional()
   @IsIn(['grouped', 'signed'])
   calcType?: 'grouped' | 'signed';
 

@@ -3,7 +3,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Field, FieldDocument } from './field.schema';
 import { UpsertFieldDto } from './dto/upsert-field.dto';
-import { ROLE_NAMES } from '../common/permissions';
 
 @Injectable()
 export class FieldsService {
@@ -11,11 +10,6 @@ export class FieldsService {
 
   async findAll() {
     return this.fieldModel.find().sort({ order: 1, createdAt: 1 });
-  }
-
-  async findForRole(roleName: string) {
-    const all = await this.findAll();
-    return all.filter((field) => field.roles.length === 0 || field.roles.includes(roleName));
   }
 
   private normalize(dto: UpsertFieldDto) {
@@ -36,7 +30,6 @@ export class FieldsService {
       name: dto.name.trim(),
       order: dto.order ?? 0,
       boxNames,
-      roles: (dto.roles || []).map((role) => role.trim()).filter((role) => (ROLE_NAMES as readonly string[]).includes(role)),
       calcType,
       groupSplit,
       icon: dto.icon || '',
