@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
@@ -17,15 +17,7 @@ export class UsersService {
     return this.userModel.find().select('-password').sort({ createdAt: -1 });
   }
 
-  async create(dto: CreateUserDto, creatorRole: string, creatorId: string) {
-    // Enforce hierarchy: superadmin -> admin/user, admin -> user only
-    if (creatorRole === 'admin' && dto.role !== 'user') {
-      throw new ForbiddenException('Admins may only create user accounts');
-    }
-    if (creatorRole === 'user') {
-      throw new ForbiddenException('Users cannot create accounts');
-    }
-
+  async create(dto: CreateUserDto, creatorId: string) {
     const normalizedEmail = dto.email.trim().toLowerCase();
     const existing = await this.findByEmail(normalizedEmail);
     if (existing) throw new ConflictException('Email already in use');
@@ -52,10 +44,7 @@ export class UsersService {
     }
   }
 
-  async remove(id: string, requesterRole: string) {
-    if (requesterRole !== 'superadmin') {
-      throw new ForbiddenException('Only super admins can remove accounts');
-    }
+  async remove(id: string) {
     const deleted = await this.userModel.findByIdAndDelete(id);
     if (!deleted) throw new NotFoundException('User not found');
     return { message: 'User removed' };
