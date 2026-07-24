@@ -13,46 +13,35 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../common/roles.guard';
-import { Roles } from '../common/roles.decorator';
+import { PermissionsGuard } from '../common/permissions.guard';
+import { RequirePermissions } from '../common/permissions.decorator';
 import { EntriesService } from './entries.service';
 import { CreateEntryDto } from './dto/create-entry.dto';
-import { UpdateBoxNamesDto } from './dto/update-box-names.dto';
 
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('entries')
 export class EntriesController {
   constructor(private entriesService: EntriesService) {}
 
+  @RequirePermissions('canCreateEntries')
   @Post()
   create(@Body() dto: CreateEntryDto, @Req() req: any) {
-    return this.entriesService.create(dto, req.user.sub);
+    return this.entriesService.create(dto, req.user.sub, req.user.role, req.user.permissions);
   }
 
-  @Get('box-names')
-  getBoxNames() {
-    return this.entriesService.getBoxNames();
-  }
-
-  @Put('box-names')
-  @Roles('superadmin')
-  updateBoxNames(@Body() dto: UpdateBoxNamesDto) {
-    return this.entriesService.updateBoxNames(dto);
-  }
-
+  @RequirePermissions('canCreateEntries')
   @Get('me')
-  @Roles('admin', 'superadmin')
   findMine(@Req() req: any) {
     return this.entriesService.findMine(req.user.sub);
   }
 
-  @Roles('admin', 'superadmin')
+  @RequirePermissions('viewAllReports')
   @Get()
   findAll(@Query() query: { name?: string; startDate?: string; endDate?: string }) {
     return this.entriesService.findAll(query);
   }
 
-  @Roles('admin', 'superadmin')
+  @RequirePermissions('viewAllReports')
   @Get('export')
   async export(
     @Query() query: { name?: string; startDate?: string; endDate?: string },
@@ -66,21 +55,35 @@ export class EntriesController {
     res.send(buffer);
   }
 
+  @RequirePermissions('viewAllReports')
+  @Get('export/pdf')
+  async exportPdf(
+    @Query() query: { name?: string; startDate?: string; endDate?: string },
+    @Res() res: Response,
+  ) {
+    const buffer = await this.entriesService.exportToPdf(query);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'attachment; filename="entries-report.pdf"',
+    });
+    res.send(buffer);
+  }
+
+  @RequirePermissions('viewAllReports')
   @Get(':id')
-  @Roles('admin', 'superadmin')
   findOne(@Param('id') id: string) {
     return this.entriesService.findOne(id);
   }
 
+  @RequirePermissions('manageReports')
   @Put(':id')
-  @Roles('superadmin')
-  update(@Param('id') id: string, @Body() dto: CreateEntryDto) {
-    return this.entriesService.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: CreateEntryDto, @Req() req: any) {
+    return this.entriesService.update(id, dto, req.user.role, req.user.permissions);
   }
 
-  @Roles('superadmin')
+  @RequirePermissions('manageReports')
   @Delete(':id')
-  remove(@Param('id') id: string, @Req() req: any) {
-    return this.entriesService.remove(id, req.user.role);
+  remove(@Param('id') id: string) {
+    return this.entriesService.remove(id);
   }
 }

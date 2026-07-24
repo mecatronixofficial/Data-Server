@@ -1,4 +1,35 @@
-import { IsArray, IsDateString, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, ArrayMinSize, ArrayMaxSize } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsDateString,
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
+
+export class EntryFieldInputDto {
+  @IsNotEmpty()
+  @IsString()
+  name: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsNumber({}, { each: true })
+  boxes: number[];
+
+  @IsOptional()
+  @IsArray()
+  details?: Array<Array<{ name: string; value: number }>>;
+
+  // Only meaningful for fields whose calculation role is 'grouped'; ignored otherwise.
+  @IsOptional()
+  @IsIn(['+', '-', '*', '/'])
+  operator?: string;
+}
 
 export class CreateEntryDto {
   @IsNotEmpty()
@@ -9,43 +40,12 @@ export class CreateEntryDto {
   date: string;
 
   @IsArray()
-  @ArrayMinSize(10)
-  @ArrayMaxSize(10)
-  @IsNumber({}, { each: true })
-  field1Boxes: number[];
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => EntryFieldInputDto)
+  fields: EntryFieldInputDto[];
 
   @IsArray()
-  @ArrayMinSize(10)
-  @ArrayMaxSize(10)
-  @IsString({ each: true })
-  field1BoxNames: string[];
-
-  @IsOptional()
-  @IsArray()
-  field1Details?: Array<Array<{ name: string; value: number }>>;
-
-  @IsIn(['+', '-', '*', '/'])
-  operator1: string;
-
-  @IsArray()
-  @ArrayMinSize(6)
-  @ArrayMaxSize(6)
-  @IsNumber({}, { each: true })
-  field2Boxes: number[];
-
-  @IsArray()
-  @ArrayMinSize(6)
-  @ArrayMaxSize(6)
-  @IsString({ each: true })
-  field2BoxNames: string[];
-
-  @IsOptional()
-  @IsArray()
-  field2Details?: Array<Array<{ name: string; value: number }>>;
-
-  @IsIn(['+', '-', '*', '/'])
-  operator2: string;
-
-  @IsIn(['+', '-', '*', '/'])
-  operator3: string;
+  @IsIn(['+', '-', '*', '/'], { each: true })
+  fieldOperators: string[];
 }

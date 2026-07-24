@@ -6,6 +6,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { EntriesModule } from './entries/entries.module';
+import { FieldsModule } from './fields/fields.module';
 import { configureMongoSrvDns } from './mongo-dns';
 
 const nodeEnv = process.env.NODE_ENV || 'development';
@@ -49,6 +50,7 @@ async function getMongoUri() {
     }),
     AuthModule,
     UsersModule,
+    FieldsModule,
     EntriesModule,
   ],
 })

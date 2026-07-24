@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
+import { permissionsForRole } from '../common/permissions';
 
 @Injectable()
 export class AuthService {
@@ -20,19 +21,9 @@ export class AuthService {
     return user;
   }
 
-  async validateGoogleUser(email: string) {
-    const user = await this.usersService.findByEmail(email);
-    if (!user) {
-      throw new UnauthorizedException(
-        'This Google account has not been granted access by an administrator',
-      );
-    }
-
-    return user;
-  }
-
   async signTokens(user: { _id: any; name: string; role: string }) {
-    const payload = { sub: user._id, name: user.name, role: user.role };
+    const permissions = permissionsForRole(user.role);
+    const payload = { sub: user._id, name: user.name, role: user.role, permissions };
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_ACCESS_SECRET,

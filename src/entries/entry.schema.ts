@@ -3,6 +3,52 @@ import { Document, Types } from 'mongoose';
 
 export type EntryDocument = Entry & Document;
 
+@Schema({ _id: false })
+export class EntryField {
+  @Prop({ required: true, trim: true })
+  name: string;
+
+  @Prop({ type: [String], required: true })
+  boxNames: string[];
+
+  @Prop({ type: [Number], required: true })
+  boxes: number[];
+
+  @Prop({ type: [[{ name: String, value: Number }]], default: [] })
+  details: Array<Array<{ name: string; value: number }>>;
+
+  // Snapshot of the field's calculation role at the time this entry was saved.
+  @Prop({ required: true, enum: ['grouped', 'signed'], default: 'signed' })
+  calcType: 'grouped' | 'signed';
+
+  // 'grouped' only: boxes[0..groupSplit-1] are group A, the rest are group B.
+  @Prop({ default: 0 })
+  groupSplit: number;
+
+  // 'grouped' only: operator combining groupATotal and groupBTotal, chosen by whoever filled the entry.
+  @Prop({ required: true, enum: ['+', '-', '*', '/'], default: '+' })
+  operator: string;
+
+  // 'grouped' only.
+  @Prop({ default: 0 })
+  groupATotal: number;
+
+  @Prop({ default: 0 })
+  groupBTotal: number;
+
+  // 'signed' only.
+  @Prop({ default: 0 })
+  positiveTotal: number;
+
+  @Prop({ default: 0 })
+  negativeTotal: number;
+
+  @Prop({ required: true })
+  total: number;
+}
+
+export const EntryFieldSchema = SchemaFactory.createForClass(EntryField);
+
 @Schema({ timestamps: true })
 export class Entry {
   @Prop({ required: true, trim: true })
@@ -11,54 +57,13 @@ export class Entry {
   @Prop({ required: true })
   date: Date;
 
-  // Field 1: 10 boxes
-  @Prop({ type: [Number], required: true })
-  field1Boxes: number[];
+  @Prop({ type: [EntryFieldSchema], required: true })
+  fields: EntryField[];
 
-  @Prop({ type: [String], required: true })
-  field1BoxNames: string[];
-
-  @Prop({ type: [[{ name: String, value: Number }]], default: [] })
-  field1Details: Array<Array<{ name: string; value: number }>>;
-
-  @Prop({ required: true })
-  total1: number; // sum of boxes 1-7
-
-  @Prop({ required: true })
-  total2: number; // sum of boxes 8-10
-
-  @Prop({ required: true, enum: ['+', '-', '*', '/'], default: '+' })
-  operator1: string;
-
-  @Prop({ required: true })
-  field1Total: number;
-
-  // Field 2: 6 boxes
-  @Prop({ type: [Number], required: true })
-  field2Boxes: number[];
-
-  @Prop({ type: [String], required: true })
-  field2BoxNames: string[];
-
-  @Prop({ type: [[{ name: String, value: Number }]], default: [] })
-  field2Details: Array<Array<{ name: string; value: number }>>;
-
-  @Prop({ required: true })
-  total3: number; // sum of all positive Field 2 values
-
-  @Prop({ required: true })
-  total4: number; // sum of all negative Field 2 values
-
-  // Retained for compatibility with existing records; Field 2 always uses addition.
-  @Prop({ required: true, enum: ['+', '-', '*', '/'], default: '+' })
-  operator2: string;
-
-  @Prop({ required: true })
-  field2Total: number;
-
-  // Field 3: combine field totals
-  @Prop({ required: true, enum: ['+', '-', '*', '/'], default: '+' })
-  operator3: string;
+  // Operators combining consecutive field totals into finalTotal.
+  // Length is fields.length - 1; empty/unused when there's a single field.
+  @Prop({ type: [String], default: [] })
+  fieldOperators: string[];
 
   @Prop({ required: true })
   finalTotal: number;
