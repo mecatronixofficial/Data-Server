@@ -1,6 +1,6 @@
 import { MinLength } from 'class-validator';
 
-export class UpdatePasswordDto {
+export class ResetPasswordDto {
   @MinLength(6)
   password: string;
 }

@@ -18,6 +18,10 @@ export class AuthService {
     const matches = await bcrypt.compare(password, user.password);
     if (!matches) throw new UnauthorizedException('Invalid email or password');
 
+    if (user.isActive === false) {
+      throw new UnauthorizedException('This account has been deactivated');
+    }
+
     return user;
   }
 

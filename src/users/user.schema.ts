@@ -19,6 +19,12 @@ export class User {
 
   @Prop({ type: Types.ObjectId, ref: 'User', default: null })
   createdBy: Types.ObjectId | null;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  assignedAdminId: Types.ObjectId | null;
+
+  @Prop({ default: true })
+  isActive: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

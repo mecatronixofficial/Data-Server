@@ -12,6 +12,9 @@ import { Entry, EntryDocument, EntryField } from './entry.schema';
 import { CreateEntryDto, EntryFieldInputDto } from './dto/create-entry.dto';
 import { FieldsService } from '../fields/fields.service';
 import { Field } from '../fields/field.schema';
+import { UsersService } from '../users/users.service';
+
+export type ReportActor = { sub: string; role: string };
 
 function sum(nums: number[]) {
   return nums.reduce((total, value) => total + value, 0);
@@ -35,7 +38,19 @@ export class EntriesService {
   constructor(
     @InjectModel(Entry.name) private entryModel: Model<EntryDocument>,
     private fieldsService: FieldsService,
+    private usersService: UsersService,
   ) {}
+
+  // An admin only sees their own entries plus those of the users assigned to
+  // them — never other admins' entries or other admins' teams. Superadmins
+  // are unrestricted.
+  private async scopeFilterForActor(filter: any, actor?: ReportActor) {
+    if (actor?.role === 'admin') {
+      const teamIds = await this.usersService.findTeamMemberIds(actor.sub);
+      filter.createdBy = { $in: [actor.sub, ...teamIds] };
+    }
+    return filter;
+  }
 
   // Field names/box counts always come from the live Field config (server-trusted),
   // never from client-submitted names.
@@ -55,6 +70,7 @@ export class EntriesService {
       const base = {
         name: field.name,
         boxNames: field.boxNames,
+        boxFields: field.boxFields,
         boxes: input.boxes,
         details: input.details || [],
         calcType: field.calcType,
@@ -147,21 +163,28 @@ export class EntriesService {
     return filter;
   }
 
-  async findAll(query: { name?: string; startDate?: string; endDate?: string }) {
-    const filter = this.buildFilter(query);
+  async findAll(query: { name?: string; startDate?: string; endDate?: string }, actor?: ReportActor) {
+    const filter = await this.scopeFilterForActor(this.buildFilter(query), actor);
     return this.entryModel
       .find(filter)
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email')
+      .populate('createdBy', 'name email role')
+      .populate('updatedBy', 'name email role')
       .sort({ updatedAt: -1 });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actor?: ReportActor) {
     const entry = await this.entryModel
       .findById(id)
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email');
+      .populate('createdBy', 'name email role')
+      .populate('updatedBy', 'name email role');
     if (!entry) throw new NotFoundException('Entry not found');
+    if (actor?.role === 'admin') {
+      const teamIds = await this.usersService.findTeamMemberIds(actor.sub);
+      const allowed = new Set([actor.sub, ...teamIds]);
+      if (!allowed.has(String((entry.createdBy as any)?._id || entry.createdBy))) {
+        throw new NotFoundException('Entry not found');
+      }
+    }
     return entry;
   }
 
@@ -196,7 +219,7 @@ export class EntriesService {
       }
       throw error;
     }
-    return entry.populate(['createdBy', 'updatedBy'].map((path) => ({ path, select: 'name email' })));
+    return entry.populate(['createdBy', 'updatedBy'].map((path) => ({ path, select: 'name email role' })));
   }
 
   async remove(id: string) {
@@ -205,8 +228,8 @@ export class EntriesService {
     return { message: 'Entry removed' };
   }
 
-  async exportToExcel(query: { name?: string; startDate?: string; endDate?: string }) {
-    const filter = this.buildFilter(query);
+  async exportToExcel(query: { name?: string; startDate?: string; endDate?: string }, actor?: ReportActor) {
+    const filter = await this.scopeFilterForActor(this.buildFilter(query), actor);
     const entries = await this.entryModel
       .find(filter)
       .populate('createdBy', 'name email')
@@ -257,9 +280,10 @@ export class EntriesService {
     return workbook.xlsx.writeBuffer();
   }
 
-  async exportToPdf(query: { name?: string; startDate?: string; endDate?: string }) {
+  async exportToPdf(query: { name?: string; startDate?: string; endDate?: string }, actor?: ReportActor) {
+    const filter = await this.scopeFilterForActor(this.buildFilter(query), actor);
     const entries = await this.entryModel
-      .find(this.buildFilter(query))
+      .find(filter)
       .populate('createdBy', 'name email')
       .sort({ date: -1 });
 
