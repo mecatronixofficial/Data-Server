@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Body, Delete, Put, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../common/permissions.guard';
 import { RequirePermissions } from '../common/permissions.decorator';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdatePasswordDto } from './dto/update-password.dto';
+import { UpdateAccountDto } from './dto/update-account.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { UpdateStatusDto } from './dto/update-status.dto';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePermissions('manageUsers')
@@ -23,8 +25,18 @@ export class UsersController {
   }
 
   @Put(':id')
-  updatePassword(@Param('id') id: string, @Body() dto: UpdatePasswordDto) {
-    return this.usersService.updatePassword(id, dto.password);
+  updateProfile(@Param('id') id: string, @Body() dto: UpdateAccountDto) {
+    return this.usersService.updateProfile(id, dto);
+  }
+
+  @Put(':id/password')
+  resetPassword(@Param('id') id: string, @Body() dto: ResetPasswordDto) {
+    return this.usersService.resetPassword(id, dto.password);
+  }
+
+  @Put(':id/status')
+  setActive(@Param('id') id: string, @Body() dto: UpdateStatusDto) {
+    return this.usersService.setActive(id, dto.isActive);
   }
 
   @Delete(':id')

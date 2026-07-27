@@ -4,12 +4,34 @@ import { Model } from 'mongoose';
 import { Field, FieldDocument } from './field.schema';
 import { UpsertFieldDto } from './dto/upsert-field.dto';
 
+type BoxFieldDef = {
+  label: string;
+  type: 'text' | 'number' | 'date' | 'time' | 'computed';
+  auto?: 'serial' | 'user' | 'constant';
+  constant?: number;
+  sumTotal?: boolean;
+  formula?: { op: 'multiply' | 'percentAdd'; a: string; b: string };
+};
+
+const DEFAULT_BOX_FIELDS: BoxFieldDef[] = [
+  { label: 'Name', type: 'text' },
+  { label: 'Value', type: 'number', sumTotal: true },
+];
+
+const BOX_FIELD_TYPES = ['text', 'number', 'date', 'time', 'computed'];
+const BOX_FIELD_AUTO = ['serial', 'user', 'constant'];
+const BOX_FIELD_FORMULA_OPS = ['multiply', 'percentAdd'];
+
 @Injectable()
 export class FieldsService {
   constructor(@InjectModel(Field.name) private fieldModel: Model<FieldDocument>) {}
 
   async findAll() {
     return this.fieldModel.find().sort({ order: 1, createdAt: 1 });
+  }
+
+  async findVisibleToUser(userId: string) {
+    return this.fieldModel.find({ visibleUserIds: userId }).sort({ order: 1, createdAt: 1 });
   }
 
   private normalize(dto: UpsertFieldDto) {
@@ -26,6 +48,33 @@ export class FieldsService {
 
     const boxIcons = boxNames.map((_, index) => dto.boxIcons?.[index] || '');
 
+    const visibleUserIds = [...new Set(dto.visibleUserIds || [])];
+
+    const boxFields = boxNames.map((_, index) => {
+      const sanitized: BoxFieldDef[] = (dto.boxFields?.[index] || [])
+        .filter((field) => field && typeof field.label === 'string' && field.label.trim())
+        .map((field: any) => {
+          const type = (BOX_FIELD_TYPES.includes(field.type) ? field.type : 'text') as BoxFieldDef['type'];
+          const auto = type !== 'computed' && BOX_FIELD_AUTO.includes(field.auto) ? (field.auto as BoxFieldDef['auto']) : undefined;
+          const constant = auto === 'constant' ? Number(field.constant) || 0 : undefined;
+          const sumTotal = type === 'number' || type === 'computed' ? Boolean(field.sumTotal) : undefined;
+          const formula =
+            type === 'computed' && field.formula && BOX_FIELD_FORMULA_OPS.includes(field.formula.op) &&
+            typeof field.formula.a === 'string' && typeof field.formula.b === 'string'
+              ? { op: field.formula.op, a: field.formula.a.trim(), b: field.formula.b.trim() }
+              : undefined;
+          return {
+            label: field.label.trim(),
+            type,
+            ...(auto ? { auto } : {}),
+            ...(constant !== undefined ? { constant } : {}),
+            ...(sumTotal ? { sumTotal } : {}),
+            ...(formula ? { formula } : {}),
+          };
+        });
+      return sanitized.length ? sanitized : DEFAULT_BOX_FIELDS;
+    });
+
     return {
       name: dto.name.trim(),
       order: dto.order ?? 0,
@@ -34,6 +83,8 @@ export class FieldsService {
       groupSplit,
       icon: dto.icon || '',
       boxIcons,
+      boxFields,
+      visibleUserIds,
     };
   }
 

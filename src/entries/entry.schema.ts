@@ -11,11 +11,19 @@ export class EntryField {
   @Prop({ type: [String], required: true })
   boxNames: string[];
 
+  // Snapshot of each box's inner-field column config at the time this entry was saved
+  // (see Field.boxFields) — kept alongside boxNames so edits later to the live Field
+  // don't change how an already-saved entry's detail rows are labeled/rendered.
+  @Prop({ type: [[Object]], default: [] })
+  boxFields: Array<Array<{ label: string; type: string; auto?: string; sumTotal?: boolean }>>;
+
   @Prop({ type: [Number], required: true })
   boxes: number[];
 
-  @Prop({ type: [[{ name: String, value: Number }]], default: [] })
-  details: Array<Array<{ name: string; value: number }>>;
+  // Per-box breakdown rows. Each row is a bag of values keyed by that box's inner-field
+  // labels (see Field.boxFields) at the time the entry was filled in.
+  @Prop({ type: [[Object]], default: [] })
+  details: Array<Array<Record<string, string | number>>>;
 
   // Snapshot of the field's calculation role at the time this entry was saved.
   @Prop({ required: true, enum: ['grouped', 'signed'], default: 'signed' })

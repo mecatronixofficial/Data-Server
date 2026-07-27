@@ -37,17 +37,18 @@ export class EntriesController {
 
   @RequirePermissions('viewAllReports')
   @Get()
-  findAll(@Query() query: { name?: string; startDate?: string; endDate?: string }) {
-    return this.entriesService.findAll(query);
+  findAll(@Query() query: { name?: string; startDate?: string; endDate?: string }, @Req() req: any) {
+    return this.entriesService.findAll(query, req.user);
   }
 
   @RequirePermissions('viewAllReports')
   @Get('export')
   async export(
     @Query() query: { name?: string; startDate?: string; endDate?: string },
+    @Req() req: any,
     @Res() res: Response,
   ) {
-    const buffer = await this.entriesService.exportToExcel(query);
+    const buffer = await this.entriesService.exportToExcel(query, req.user);
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': 'attachment; filename="entries-report.xlsx"',
@@ -59,9 +60,10 @@ export class EntriesController {
   @Get('export/pdf')
   async exportPdf(
     @Query() query: { name?: string; startDate?: string; endDate?: string },
+    @Req() req: any,
     @Res() res: Response,
   ) {
-    const buffer = await this.entriesService.exportToPdf(query);
+    const buffer = await this.entriesService.exportToPdf(query, req.user);
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': 'attachment; filename="entries-report.pdf"',
@@ -71,8 +73,8 @@ export class EntriesController {
 
   @RequirePermissions('viewAllReports')
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.entriesService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: any) {
+    return this.entriesService.findOne(id, req.user);
   }
 
   @RequirePermissions('manageReports')

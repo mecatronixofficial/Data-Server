@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Put,
   Body,
   Res,
   Req,
@@ -12,13 +13,17 @@ import { Response, Request } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { UsersService } from '../users/users.service';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
     private jwtService: JwtService,
+    private usersService: UsersService,
   ) {}
 
   private frontendUrl() {
@@ -92,7 +97,43 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  me(@Req() req: any) {
-    return req.user;
+  async me(@Req() req: any) {
+    const user = await this.usersService.findById(req.user.sub);
+    return {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      permissions: req.user.permissions,
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('me')
+  async updateProfile(
+    @Req() req: any,
+    @Body() dto: UpdateProfileDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const updated = await this.usersService.updateProfile(req.user.sub, dto);
+    const { accessToken, refreshToken } = await this.authService.signTokens(updated);
+    this.setAuthCookies(res, accessToken, refreshToken);
+
+    return {
+      id: updated._id,
+      name: updated.name,
+      email: updated.email,
+      role: updated.role,
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('me/password')
+  async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
+    return this.usersService.changeOwnPassword(
+      req.user.sub,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
 }

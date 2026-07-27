@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsNotEmpty, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsMongoId, IsNotEmpty, MinLength, ValidateIf } from 'class-validator';
 
 export class CreateUserDto {
   @IsNotEmpty()
@@ -12,4 +12,8 @@ export class CreateUserDto {
 
   @IsIn(['user', 'admin', 'superadmin'])
   role: string;
+
+  @ValidateIf((o) => o.role === 'user')
+  @IsMongoId()
+  assignedAdminId?: string;
 }

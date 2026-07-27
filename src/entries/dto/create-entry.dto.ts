@@ -23,7 +23,7 @@ export class EntryFieldInputDto {
 
   @IsOptional()
   @IsArray()
-  details?: Array<Array<{ name: string; value: number }>>;
+  details?: Array<Array<Record<string, string | number>>>;
 
   // Only meaningful for fields whose calculation role is 'grouped'; ignored otherwise.
   @IsOptional()
