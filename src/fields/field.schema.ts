@@ -22,6 +22,11 @@ export class Field {
   @Prop({ type: [String], default: [] })
   boxIcons: string[];
 
+  // Color key per box, parallel to boxNames (see COLOR_KEYS in color-keys.ts). Empty string
+  // means no override — the box falls back to the sign-based green/red/blue coloring.
+  @Prop({ type: [String], default: [] })
+  boxColors: string[];
+
   // Inner-field columns for each box's detail table, parallel to boxNames. Each box has
   // its own independent, fully editable list (defaults to Name/Value, see FieldsService).
   // 'auto' columns are filled in without the user typing them: row position, the logged-in
@@ -38,6 +43,7 @@ export class Field {
     auto?: 'serial' | 'user' | 'constant';
     constant?: number;
     sumTotal?: boolean;
+    sumSign?: 'add' | 'subtract';
     formula?: { op: 'multiply' | 'percentAdd'; a: string; b: string };
   }>>;
 
@@ -56,6 +62,14 @@ export class Field {
   // /fields regardless of this setting.
   @Prop({ type: [String], default: [] })
   visibleUserIds: string[];
+
+  // When true, only 'user'-role accounts may edit this field's box/detail values on an
+  // entry — 'admin' accounts see the values but any edits they submit are ignored (see
+  // EntriesService). When false, it's the reverse: only 'admin' may edit it, 'user' cannot.
+  // Superadmin is never restricted by this. Lets one entry be jointly filled in by an
+  // admin and the user assigned to them, each owning a different subset of fields.
+  @Prop({ default: false })
+  userOnlyEdit: boolean;
 }
 
 export const FieldSchema = SchemaFactory.createForClass(Field);

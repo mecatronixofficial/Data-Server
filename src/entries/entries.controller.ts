@@ -26,13 +26,13 @@ export class EntriesController {
   @RequirePermissions('canCreateEntries')
   @Post()
   create(@Body() dto: CreateEntryDto, @Req() req: any) {
-    return this.entriesService.create(dto, req.user.sub);
+    return this.entriesService.create(dto, req.user);
   }
 
   @RequirePermissions('canCreateEntries')
   @Get('me')
   findMine(@Req() req: any) {
-    return this.entriesService.findMine(req.user.sub);
+    return this.entriesService.findMine(req.user);
   }
 
   @RequirePermissions('viewAllReports')
@@ -77,10 +77,12 @@ export class EntriesController {
     return this.entriesService.findOne(id, req.user);
   }
 
-  @RequirePermissions('manageReports')
+  // No @RequirePermissions here: admins/superadmins update via manageReports,
+  // but a regular user must also be able to update their own single entry
+  // (they only have canCreateEntries) — entriesService.update enforces both.
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: CreateEntryDto, @Req() req: any) {
-    return this.entriesService.update(id, dto, req.user.sub);
+    return this.entriesService.update(id, dto, req.user);
   }
 
   @RequirePermissions('manageReports')

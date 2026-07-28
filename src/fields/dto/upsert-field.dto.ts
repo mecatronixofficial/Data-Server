@@ -1,5 +1,6 @@
-import { ArrayMinSize, IsArray, IsIn, IsInt, IsMongoId, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsMongoId, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ICON_KEYS } from '../icon-keys';
+import { COLOR_KEYS } from '../color-keys';
 
 export class UpsertFieldDto {
   @IsNotEmpty()
@@ -32,6 +33,11 @@ export class UpsertFieldDto {
   @IsIn([...ICON_KEYS, ''], { each: true })
   boxIcons?: string[];
 
+  @IsOptional()
+  @IsArray()
+  @IsIn([...COLOR_KEYS, ''], { each: true })
+  boxColors?: string[];
+
   // Inner-field columns per box, parallel to boxNames. Shape is validated/sanitized
   // (and defaulted to Name/Value when empty) in FieldsService.normalize().
   @IsOptional()
@@ -42,6 +48,7 @@ export class UpsertFieldDto {
     auto?: string;
     constant?: number;
     sumTotal?: boolean;
+    sumSign?: string;
     formula?: { op: string; a: string; b: string };
   }>>;
 
@@ -50,4 +57,10 @@ export class UpsertFieldDto {
   @IsArray()
   @IsMongoId({ each: true })
   visibleUserIds?: string[];
+
+  // When true, only 'user' accounts can edit this field on an entry; 'admin' sees it
+  // read-only. When false (default), only 'admin' can edit it.
+  @IsOptional()
+  @IsBoolean()
+  userOnlyEdit?: boolean;
 }

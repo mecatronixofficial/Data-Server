@@ -1,0 +1,36 @@
+// Allowed color keys for fields/boxes. Keep in sync with the frontend's COLORS list
+// in components/ColorPicker.tsx.
+export const COLOR_KEYS = [
+  'red',
+  'orange',
+  'amber',
+  'yellow',
+  'lime',
+  'green',
+  'emerald',
+  'teal',
+  'cyan',
+  'sky',
+  'blue',
+  'indigo',
+  'violet',
+  'purple',
+  'fuchsia',
+  'pink',
+  'rose',
+  'slate',
+  'gray',
+  'zinc',
+  'neutral',
+  'stone',
+  'red-dark',
+  'orange-dark',
+  'green-dark',
+  'teal-dark',
+  'blue-dark',
+  'indigo-dark',
+  'purple-dark',
+  'pink-dark',
+] as const;
+
+export type ColorKey = (typeof COLOR_KEYS)[number];
