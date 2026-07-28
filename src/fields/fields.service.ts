@@ -2,7 +2,9 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Field, FieldDocument } from './field.schema';
+import { FinalTotalSettings, FinalTotalSettingsDocument } from './final-total-settings.schema';
 import { UpsertFieldDto } from './dto/upsert-field.dto';
+import { UpdateFinalTotalSettingsDto } from './dto/update-final-total-settings.dto';
 
 type BoxFieldDef = {
   label: string;
@@ -10,6 +12,7 @@ type BoxFieldDef = {
   auto?: 'serial' | 'user' | 'constant';
   constant?: number;
   sumTotal?: boolean;
+  sumSign?: 'add' | 'subtract';
   formula?: { op: 'multiply' | 'percentAdd'; a: string; b: string };
 };
 
@@ -24,7 +27,28 @@ const BOX_FIELD_FORMULA_OPS = ['multiply', 'percentAdd'];
 
 @Injectable()
 export class FieldsService {
-  constructor(@InjectModel(Field.name) private fieldModel: Model<FieldDocument>) {}
+  constructor(
+    @InjectModel(Field.name) private fieldModel: Model<FieldDocument>,
+    @InjectModel(FinalTotalSettings.name) private finalTotalSettingsModel: Model<FinalTotalSettingsDocument>,
+  ) {}
+
+  async getFinalTotalSettings() {
+    const settings = await this.finalTotalSettingsModel.findOne();
+    return {
+      label: settings?.label || 'Final Total',
+      icon: settings?.icon || '',
+      sign: settings?.sign === 'subtract' ? 'subtract' : 'add',
+    };
+  }
+
+  async updateFinalTotalSettings(dto: UpdateFinalTotalSettingsDto) {
+    const updated = await this.finalTotalSettingsModel.findOneAndUpdate(
+      {},
+      { label: dto.label.trim() || 'Final Total', icon: dto.icon || '', sign: dto.sign === 'subtract' ? 'subtract' : 'add' },
+      { upsert: true, new: true },
+    );
+    return { label: updated.label, icon: updated.icon, sign: updated.sign };
+  }
 
   async findAll() {
     return this.fieldModel.find().sort({ order: 1, createdAt: 1 });
@@ -32,6 +56,14 @@ export class FieldsService {
 
   async findVisibleToUser(userId: string) {
     return this.fieldModel.find({ visibleUserIds: userId }).sort({ order: 1, createdAt: 1 });
+  }
+
+  // Lightweight, name-keyed lock map available to any authenticated account (not gated
+  // behind manageFields) — an admin editing a teammate's entry in Reports needs to know
+  // which fields are user-only-edit even for fields outside their own visibleUserIds.
+  async findEditLocks() {
+    const fields = await this.fieldModel.find().select('name userOnlyEdit');
+    return fields.map((field) => ({ name: field.name, userOnlyEdit: field.userOnlyEdit }));
   }
 
   private normalize(dto: UpsertFieldDto) {
@@ -47,8 +79,10 @@ export class FieldsService {
     }
 
     const boxIcons = boxNames.map((_, index) => dto.boxIcons?.[index] || '');
+    const boxColors = boxNames.map((_, index) => dto.boxColors?.[index] || '');
 
     const visibleUserIds = [...new Set(dto.visibleUserIds || [])];
+    const userOnlyEdit = Boolean(dto.userOnlyEdit);
 
     const boxFields = boxNames.map((_, index) => {
       const sanitized: BoxFieldDef[] = (dto.boxFields?.[index] || [])
@@ -58,6 +92,7 @@ export class FieldsService {
           const auto = type !== 'computed' && BOX_FIELD_AUTO.includes(field.auto) ? (field.auto as BoxFieldDef['auto']) : undefined;
           const constant = auto === 'constant' ? Number(field.constant) || 0 : undefined;
           const sumTotal = type === 'number' || type === 'computed' ? Boolean(field.sumTotal) : undefined;
+          const sumSign = sumTotal && field.sumSign === 'subtract' ? 'subtract' : undefined;
           const formula =
             type === 'computed' && field.formula && BOX_FIELD_FORMULA_OPS.includes(field.formula.op) &&
             typeof field.formula.a === 'string' && typeof field.formula.b === 'string'
@@ -69,6 +104,7 @@ export class FieldsService {
             ...(auto ? { auto } : {}),
             ...(constant !== undefined ? { constant } : {}),
             ...(sumTotal ? { sumTotal } : {}),
+            ...(sumSign ? { sumSign } : {}),
             ...(formula ? { formula } : {}),
           };
         });
@@ -83,8 +119,10 @@ export class FieldsService {
       groupSplit,
       icon: dto.icon || '',
       boxIcons,
+      boxColors,
       boxFields,
       visibleUserIds,
+      userOnlyEdit,
     };
   }
 

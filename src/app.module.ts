@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { EntriesModule } from './entries/entries.module';
 import { FieldsModule } from './fields/fields.module';
+import { RecordsModule } from './records/records.module';
 import { ReportSettingsModule } from './report-settings/report-settings.module';
 import { configureMongoSrvDns } from './mongo-dns';
 
@@ -52,6 +53,7 @@ async function getMongoUri() {
     AuthModule,
     UsersModule,
     FieldsModule,
+    RecordsModule,
     EntriesModule,
     ReportSettingsModule,
   ],

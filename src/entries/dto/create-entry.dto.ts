@@ -44,8 +44,4 @@ export class CreateEntryDto {
   @ValidateNested({ each: true })
   @Type(() => EntryFieldInputDto)
   fields: EntryFieldInputDto[];
-
-  @IsArray()
-  @IsIn(['+', '-', '*', '/'], { each: true })
-  fieldOperators: string[];
 }

@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 
 export type EntryDocument = Entry & Document;
 
@@ -57,6 +57,37 @@ export class EntryField {
 
 export const EntryFieldSchema = SchemaFactory.createForClass(EntryField);
 
+// One value that changed on an update, e.g. name/date or a single field box.
+@Schema({ _id: false })
+export class EntryChange {
+  @Prop({ required: true })
+  label: string;
+
+  @Prop({ type: MongooseSchema.Types.Mixed })
+  from: string | number | null;
+
+  @Prop({ type: MongooseSchema.Types.Mixed })
+  to: string | number | null;
+}
+
+export const EntryChangeSchema = SchemaFactory.createForClass(EntryChange);
+
+// One saved snapshot of "who changed what, when" — a new item is pushed each time
+// update() actually changes a value, capped at the 5 most recent (see entries.service).
+@Schema({ _id: false })
+export class EntryHistoryItem {
+  @Prop({ required: true, default: Date.now })
+  updatedAt: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  updatedBy: Types.ObjectId;
+
+  @Prop({ type: [EntryChangeSchema], default: [] })
+  changes: EntryChange[];
+}
+
+export const EntryHistoryItemSchema = SchemaFactory.createForClass(EntryHistoryItem);
+
 @Schema({ timestamps: true })
 export class Entry {
   @Prop({ required: true, trim: true })
@@ -82,6 +113,10 @@ export class Entry {
   // Set on update() only — absent for entries that have never been edited.
   @Prop({ type: Types.ObjectId, ref: 'User' })
   updatedBy?: Types.ObjectId;
+
+  // Most recent edits first, capped at 5 (see entries.service#update).
+  @Prop({ type: [EntryHistoryItemSchema], default: [] })
+  history: EntryHistoryItem[];
 }
 
 export const EntrySchema = SchemaFactory.createForClass(Entry);

@@ -52,9 +52,26 @@ export class EntriesService {
     return filter;
   }
 
+  // Whether this actor is allowed to write this field's values, per Field.userOnlyEdit:
+  // superadmin always can; admin can unless the field is locked to the user; user can
+  // only on fields locked to them. Lets one entry be jointly filled by an admin and the
+  // user assigned to them, each owning a different subset of fields.
+  private canEditField(actorRole: string, field: Field) {
+    if (actorRole === 'superadmin') return true;
+    if (actorRole === 'admin') return !field.userOnlyEdit;
+    if (actorRole === 'user') return Boolean(field.userOnlyEdit);
+    return false;
+  }
+
   // Field names/box counts always come from the live Field config (server-trusted),
-  // never from client-submitted names.
-  private async resolveFields(inputs: EntryFieldInputDto[]) {
+  // never from client-submitted names. Values for a field this actor isn't allowed to
+  // edit are never taken from the client — they keep their previous saved value
+  // (update) or start blank (create), no matter what was submitted.
+  private async resolveFields(
+    inputs: EntryFieldInputDto[],
+    actorRole: string,
+    existingByName?: Map<string, EntryField>,
+  ) {
     const canonical: Field[] = await this.fieldsService.findAll();
     const canonicalByName = new Map(canonical.map((field) => [field.name, field]));
 
@@ -67,20 +84,26 @@ export class EntriesService {
         throw new BadRequestException(`Field "${field.name}" expects ${field.boxNames.length} boxes`);
       }
 
+      const allowed = this.canEditField(actorRole, field);
+      const existing = existingByName?.get(field.name);
+      const boxes = allowed ? input.boxes : existing ? [...existing.boxes] : input.boxes.map(() => 0);
+      const details = allowed ? (input.details || []) : existing ? existing.details : input.boxes.map(() => []);
+      const operatorInput = allowed ? input.operator : existing?.operator;
+
       const base = {
         name: field.name,
         boxNames: field.boxNames,
         boxFields: field.boxFields,
-        boxes: input.boxes,
-        details: input.details || [],
+        boxes,
+        details,
         calcType: field.calcType,
         groupSplit: field.groupSplit,
       };
 
       if (field.calcType === 'grouped') {
-        const operator = input.operator || '+';
-        const groupATotal = sum(input.boxes.slice(0, field.groupSplit));
-        const groupBTotal = sum(input.boxes.slice(field.groupSplit));
+        const operator = operatorInput || '+';
+        const groupATotal = sum(boxes.slice(0, field.groupSplit));
+        const groupBTotal = sum(boxes.slice(field.groupSplit));
         return {
           ...base,
           operator,
@@ -92,8 +115,8 @@ export class EntriesService {
         };
       }
 
-      const positiveTotal = input.boxes.filter((value) => value > 0).reduce((total, value) => total + value, 0);
-      const negativeTotal = input.boxes.filter((value) => value < 0).reduce((total, value) => total + value, 0);
+      const positiveTotal = boxes.filter((value) => value > 0).reduce((total, value) => total + value, 0);
+      const negativeTotal = boxes.filter((value) => value < 0).reduce((total, value) => total + value, 0);
       return {
         ...base,
         operator: '+',
@@ -108,32 +131,41 @@ export class EntriesService {
     return fields;
   }
 
-  private combineTotals(fields: EntryField[], fieldOperators: string[]) {
-    if (fields.length === 0) return 0;
-    if (fields.length === 1) return fields[0].total;
-    if (fieldOperators.length !== fields.length - 1) {
-      throw new BadRequestException('fieldOperators must have one entry between each pair of fields');
-    }
-    return fields.slice(1).reduce((acc, field, index) => applyOperator(acc, field.total, fieldOperators[index]), fields[0].total);
+  // Plain sum of every field's total. The overall +/- sign applied on top of this
+  // (see FinalTotalSettings.sign, a single superadmin-set global toggle — not a
+  // per-field setting) is applied by the caller.
+  private combineTotals(fields: EntryField[]) {
+    const rawTotal = fields.reduce((total, field) => total + field.total, 0);
+    const fieldOperators = fields.length > 1 ? Array(fields.length - 1).fill('+') : [];
+    return { rawTotal, fieldOperators };
   }
 
-  async create(dto: CreateEntryDto, userId: string) {
+  // Escapes a name for safe use inside a case-insensitive exact-match $regex.
+  private escapeRegex(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private exactNameRegex(value: string) {
+    return { $regex: `^${this.escapeRegex(value)}$`, $options: 'i' };
+  }
+
+  async create(dto: CreateEntryDto, actor: ReportActor) {
     const normalizedName = dto.name.trim();
-    const existing = await this.entryModel.findOne({
-      name: { $regex: `^${normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
-    });
+    const existing = await this.entryModel.findOne({ name: this.exactNameRegex(normalizedName) });
     if (existing) throw new ConflictException('An entry with this name already exists');
 
-    const fields = await this.resolveFields(dto.fields);
-    const finalTotal = this.combineTotals(fields, dto.fieldOperators);
+    const fields = await this.resolveFields(dto.fields, actor.role);
+    const { rawTotal, fieldOperators } = this.combineTotals(fields);
+    const { sign } = await this.fieldsService.getFinalTotalSettings();
+    const finalTotal = sign === 'subtract' ? -rawTotal : rawTotal;
 
     const created = new this.entryModel({
       name: normalizedName,
       date: new Date(dto.date),
       fields,
-      fieldOperators: fields.length > 1 ? dto.fieldOperators : [],
+      fieldOperators: fields.length > 1 ? fieldOperators : [],
       finalTotal,
-      createdBy: new Types.ObjectId(userId),
+      createdBy: new Types.ObjectId(actor.sub),
     });
 
     try {
@@ -146,8 +178,15 @@ export class EntriesService {
     }
   }
 
-  async findMine(userId: string) {
-    return this.entryModel.find({ createdBy: userId }).sort({ date: -1 });
+  // "My entry" means the record for this person, not just rows they personally
+  // saved: an admin may have created it on the user's behalf (createdBy = admin),
+  // so match on the user's own account name too, not createdBy alone.
+  async findMine(actor: { sub: string; name: string }) {
+    return this.entryModel
+      .find({
+        $or: [{ createdBy: actor.sub }, { name: this.exactNameRegex(actor.name.trim()) }],
+      })
+      .sort({ date: -1 });
   }
 
   private buildFilter(query: { name?: string; startDate?: string; endDate?: string }) {
@@ -176,7 +215,8 @@ export class EntriesService {
     const entry = await this.entryModel
       .findById(id)
       .populate('createdBy', 'name email role')
-      .populate('updatedBy', 'name email role');
+      .populate('updatedBy', 'name email role')
+      .populate('history.updatedBy', 'name email role');
     if (!entry) throw new NotFoundException('Entry not found');
     if (actor?.role === 'admin') {
       const teamIds = await this.usersService.findTeamMemberIds(actor.sub);
@@ -188,28 +228,97 @@ export class EntriesService {
     return entry;
   }
 
-  async update(id: string, dto: CreateEntryDto, userId: string) {
-    const normalizedName = dto.name.trim();
-    const duplicate = await this.entryModel.findOne({
-      _id: { $ne: id },
-      name: { $regex: `^${normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
-    });
-    if (duplicate) throw new ConflictException('An entry with this name already exists');
+  // Compares the currently-saved entry against the incoming payload and returns one
+  // change record per value that actually differs (name, date, and per-box field values).
+  private diffEntry(entry: EntryDocument, normalizedName: string, newDate: Date, fields: EntryField[]) {
+    const changes: { label: string; from: string | number | null; to: string | number | null }[] = [];
 
+    if (entry.name !== normalizedName) {
+      changes.push({ label: 'Name', from: entry.name, to: normalizedName });
+    }
+
+    const oldDateStr = entry.date.toISOString().split('T')[0];
+    const newDateStr = newDate.toISOString().split('T')[0];
+    if (oldDateStr !== newDateStr) {
+      changes.push({ label: 'Date', from: oldDateStr, to: newDateStr });
+    }
+
+    const oldFieldsByName = new Map(entry.fields.map((field) => [field.name, field]));
+    for (const field of fields) {
+      const oldField = oldFieldsByName.get(field.name);
+      if (!oldField) continue;
+      field.boxes.forEach((value, index) => {
+        const oldValue = oldField.boxes[index] ?? 0;
+        if (oldValue !== value) {
+          const boxLabel = field.boxNames[index] || `Box ${index + 1}`;
+          changes.push({ label: `${field.name} – ${boxLabel}`, from: oldValue, to: value });
+        }
+      });
+    }
+
+    return changes;
+  }
+
+  async update(
+    id: string,
+    dto: CreateEntryDto,
+    actor: { sub: string; name: string; role: string; permissions?: Record<string, boolean> },
+  ) {
     const entry = await this.entryModel.findById(id);
     if (!entry) throw new NotFoundException('Entry not found');
 
-    const fields = await this.resolveFields(dto.fields);
-    const finalTotal = this.combineTotals(fields, dto.fieldOperators);
+    // Admins/superadmins (manageReports) can edit any entry. A regular user
+    // (canCreateEntries only) may edit their own entry — matched by createdBy
+    // OR by name, since an admin may have originally created it on their
+    // behalf (createdBy = admin, name = the user's own name).
+    const isOwner = String(entry.createdBy) === actor.sub
+      || entry.name.trim().toLowerCase() === actor.name.trim().toLowerCase();
+    const canManageAny = Boolean(actor.permissions?.manageReports);
+    const canUpdateOwn = Boolean(actor.permissions?.canCreateEntries) && isOwner;
+    if (!canManageAny && !canUpdateOwn) {
+      throw new ForbiddenException('You do not have permission to perform this action');
+    }
+
+    // An admin (unlike superadmin) may only manage entries within their own team —
+    // their own record or one of the users assigned to them (mirrors findOne/scopeFilterForActor).
+    if (canManageAny && actor.role === 'admin') {
+      const teamIds = await this.usersService.findTeamMemberIds(actor.sub);
+      const allowed = new Set([actor.sub, ...teamIds]);
+      if (!allowed.has(String(entry.createdBy))) {
+        throw new ForbiddenException('You do not have permission to perform this action');
+      }
+    }
+
+    const normalizedName = dto.name.trim();
+    const duplicate = await this.entryModel.findOne({
+      _id: { $ne: id },
+      name: this.exactNameRegex(normalizedName),
+    });
+    if (duplicate) throw new ConflictException('An entry with this name already exists');
+
+    const existingByName = new Map(entry.fields.map((field) => [field.name, field]));
+    const fields = await this.resolveFields(dto.fields, actor.role, existingByName);
+    const { rawTotal, fieldOperators } = this.combineTotals(fields);
+    const { sign } = await this.fieldsService.getFinalTotalSettings();
+    const finalTotal = sign === 'subtract' ? -rawTotal : rawTotal;
+    const newDate = new Date(dto.date);
+    const changes = this.diffEntry(entry, normalizedName, newDate, fields);
 
     entry.set({
       name: normalizedName,
-      date: new Date(dto.date),
+      date: newDate,
       fields,
-      fieldOperators: fields.length > 1 ? dto.fieldOperators : [],
+      fieldOperators: fields.length > 1 ? fieldOperators : [],
       finalTotal,
-      updatedBy: new Types.ObjectId(userId),
+      updatedBy: new Types.ObjectId(actor.sub),
     });
+
+    if (changes.length > 0) {
+      entry.history = [
+        { updatedAt: new Date(), updatedBy: new Types.ObjectId(actor.sub), changes },
+        ...entry.history,
+      ].slice(0, 5);
+    }
 
     try {
       await entry.save();
@@ -219,7 +328,9 @@ export class EntriesService {
       }
       throw error;
     }
-    return entry.populate(['createdBy', 'updatedBy'].map((path) => ({ path, select: 'name email role' })));
+    return entry.populate(
+      ['createdBy', 'updatedBy', 'history.updatedBy'].map((path) => ({ path, select: 'name email role' })),
+    );
   }
 
   async remove(id: string) {
