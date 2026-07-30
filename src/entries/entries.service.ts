@@ -131,13 +131,17 @@ export class EntriesService {
     return fields;
   }
 
-  // Plain sum of every field's total. The overall +/- sign applied on top of this
-  // (see FinalTotalSettings.sign, a single superadmin-set global toggle — not a
-  // per-field setting) is applied by the caller.
-  private combineTotals(fields: EntryField[]) {
-    const rawTotal = fields.reduce((total, field) => total + field.total, 0);
-    const fieldOperators = fields.length > 1 ? Array(fields.length - 1).fill('+') : [];
-    return { rawTotal, fieldOperators };
+  // Apply the single superadmin-selected operator between consecutive field totals.
+  private combineTotals(fields: EntryField[], sign: 'add' | 'subtract') {
+    const operator = sign === 'subtract' ? '-' : '+';
+    const fieldOperators = fields.length > 1 ? Array(fields.length - 1).fill(operator) : [];
+    const finalTotal = fields.length === 0
+      ? 0
+      : fields.slice(1).reduce(
+          (total, field) => applyOperator(total, field.total, operator),
+          fields[0].total,
+        );
+    return { finalTotal, fieldOperators };
   }
 
   // Escapes a name for safe use inside a case-insensitive exact-match $regex.
@@ -155,9 +159,8 @@ export class EntriesService {
     if (existing) throw new ConflictException('An entry with this name already exists');
 
     const fields = await this.resolveFields(dto.fields, actor.role);
-    const { rawTotal, fieldOperators } = this.combineTotals(fields);
     const { sign } = await this.fieldsService.getFinalTotalSettings();
-    const finalTotal = sign === 'subtract' ? -rawTotal : rawTotal;
+    const { finalTotal, fieldOperators } = this.combineTotals(fields, sign);
 
     const created = new this.entryModel({
       name: normalizedName,
@@ -298,9 +301,8 @@ export class EntriesService {
 
     const existingByName = new Map(entry.fields.map((field) => [field.name, field]));
     const fields = await this.resolveFields(dto.fields, actor.role, existingByName);
-    const { rawTotal, fieldOperators } = this.combineTotals(fields);
     const { sign } = await this.fieldsService.getFinalTotalSettings();
-    const finalTotal = sign === 'subtract' ? -rawTotal : rawTotal;
+    const { finalTotal, fieldOperators } = this.combineTotals(fields, sign);
     const newDate = new Date(dto.date);
     const changes = this.diffEntry(entry, normalizedName, newDate, fields);
 

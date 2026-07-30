@@ -32,7 +32,7 @@ export class FieldsService {
     @InjectModel(FinalTotalSettings.name) private finalTotalSettingsModel: Model<FinalTotalSettingsDocument>,
   ) {}
 
-  async getFinalTotalSettings() {
+  async getFinalTotalSettings(): Promise<{ label: string; icon: string; sign: 'add' | 'subtract' }> {
     const settings = await this.finalTotalSettingsModel.findOne();
     return {
       label: settings?.label || 'Final Total',
