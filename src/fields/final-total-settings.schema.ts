@@ -13,8 +13,8 @@ export class FinalTotalSettings {
   @Prop({ default: '' })
   icon: string;
 
-  // Whether the overall Final Total is shown/stored as a positive or negative value.
-  // A single global toggle — not a per-field setting.
+  // The operator applied between consecutive field totals.
+  // A single global toggle, not a per-field setting.
   @Prop({ enum: ['add', 'subtract'], default: 'add' })
   sign: 'add' | 'subtract';
 }
