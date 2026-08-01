@@ -57,12 +57,6 @@ export class Field {
   @Prop({ default: 0 })
   groupSplit: number;
 
-  // Specific user/admin account ids allowed to see this field on the data-entry page.
-  // Empty = hidden from every user/admin account. Superadmin always manages fields via
-  // /fields regardless of this setting.
-  @Prop({ type: [String], default: [] })
-  visibleUserIds: string[];
-
   // When true, only 'user'-role accounts may edit this field's box/detail values on an
   // entry — 'admin' accounts see the values but any edits they submit are ignored (see
   // EntriesService). When false, it's the reverse: only 'admin' may edit it, 'user' cannot.

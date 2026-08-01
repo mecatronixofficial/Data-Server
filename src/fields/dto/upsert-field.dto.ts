@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsMongoId, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ICON_KEYS } from '../icon-keys';
 import { COLOR_KEYS } from '../color-keys';
 
@@ -51,12 +51,6 @@ export class UpsertFieldDto {
     sumSign?: string;
     formula?: { op: string; a: string; b: string };
   }>>;
-
-  // Specific user/admin accounts allowed to see this field. Empty means hidden from everyone.
-  @IsOptional()
-  @IsArray()
-  @IsMongoId({ each: true })
-  visibleUserIds?: string[];
 
   // When true, only 'user' accounts can edit this field on an entry; 'admin' sees it
   // read-only. When false (default), only 'admin' can edit it.

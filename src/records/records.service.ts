@@ -71,17 +71,15 @@ export class RecordsService {
     return fields.map((f) => ({ fieldId: f.fieldId, userId: f.userId }));
   }
 
-  // Grants the record's admin(s) and each field's assigned user visibility on that
-  // field, and flips its userOnlyEdit on so the admin can see the entry but only the
-  // user can edit it. Additive only — never revokes access another record may still
-  // rely on for a shared field.
-  private async applyFieldAccess(fields: { fieldId: string; userId: string }[], adminIds: string[]) {
+  // Assigned record fields are user-owned work, so admins can view their values while
+  // the assigned user edits them.
+  private async applyFieldWorkAssignment(fields: { fieldId: string; userId: string }[]) {
     if (fields.length === 0) return;
     await this.fieldModel.bulkWrite(
-      fields.map(({ fieldId, userId }) => ({
+      fields.map(({ fieldId }) => ({
         updateOne: {
           filter: { _id: fieldId },
-          update: { $addToSet: { visibleUserIds: { $each: [...adminIds, userId] } }, $set: { userOnlyEdit: true } },
+          update: { $set: { userOnlyEdit: true } },
         },
       })),
     );
@@ -94,7 +92,7 @@ export class RecordsService {
     ]);
     const created = new this.recordModel({ name: dto.name.trim(), fields, adminIds });
     await created.save();
-    await this.applyFieldAccess(fields, adminIds);
+    await this.applyFieldWorkAssignment(fields);
     return created.populate([
       { path: 'fields.fieldId', select: 'name' },
       { path: 'fields.userId', select: 'name' },
@@ -112,7 +110,7 @@ export class RecordsService {
     ]);
     record.set({ name: dto.name.trim(), fields, adminIds });
     await record.save();
-    await this.applyFieldAccess(fields, adminIds);
+    await this.applyFieldWorkAssignment(fields);
     return record.populate([
       { path: 'fields.fieldId', select: 'name' },
       { path: 'fields.userId', select: 'name' },
