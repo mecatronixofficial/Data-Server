@@ -23,8 +23,23 @@ export class User {
   @Prop({ type: Types.ObjectId, ref: 'User', default: null })
   assignedAdminId: Types.ObjectId | null;
 
+  // Admin-only, human-readable identity for the team. teamNameKey is the
+  // normalized value used to enforce case-insensitive uniqueness.
+  @Prop({ trim: true })
+  teamName?: string;
+
+  @Prop({ select: false })
+  teamNameKey?: string;
+
   @Prop({ default: true })
   isActive: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+UserSchema.index(
+  { teamNameKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { role: 'admin', teamNameKey: { $type: 'string' } },
+  },
+);

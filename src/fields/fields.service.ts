@@ -54,13 +54,7 @@ export class FieldsService {
     return this.fieldModel.find().sort({ order: 1, createdAt: 1 });
   }
 
-  async findVisibleToUser(userId: string) {
-    return this.fieldModel.find({ visibleUserIds: userId }).sort({ order: 1, createdAt: 1 });
-  }
-
-  // Lightweight, name-keyed lock map available to any authenticated account (not gated
-  // behind manageFields) — an admin editing a teammate's entry in Reports needs to know
-  // which fields are user-only-edit even for fields outside their own visibleUserIds.
+  // Lightweight, name-keyed lock map available to any authenticated account.
   async findEditLocks() {
     const fields = await this.fieldModel.find().select('name userOnlyEdit');
     return fields.map((field) => ({ name: field.name, userOnlyEdit: field.userOnlyEdit }));
@@ -81,7 +75,6 @@ export class FieldsService {
     const boxIcons = boxNames.map((_, index) => dto.boxIcons?.[index] || '');
     const boxColors = boxNames.map((_, index) => dto.boxColors?.[index] || '');
 
-    const visibleUserIds = [...new Set(dto.visibleUserIds || [])];
     const userOnlyEdit = Boolean(dto.userOnlyEdit);
 
     const boxFields = boxNames.map((_, index) => {
@@ -121,7 +114,6 @@ export class FieldsService {
       boxIcons,
       boxColors,
       boxFields,
-      visibleUserIds,
       userOnlyEdit,
     };
   }

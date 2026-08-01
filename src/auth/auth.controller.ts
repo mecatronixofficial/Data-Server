@@ -99,11 +99,16 @@ export class AuthController {
   @Get('me')
   async me(@Req() req: any) {
     const user = await this.usersService.findById(req.user.sub);
+    const reportContext = user.role === 'superadmin'
+      ? null
+      : await this.usersService.getReportContext(user.id).catch(() => null);
     return {
       id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
+      assignedAdminId: user.assignedAdminId,
+      teamName: reportContext?.teamName || user.teamName,
       permissions: req.user.permissions,
     };
   }

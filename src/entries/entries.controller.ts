@@ -15,7 +15,7 @@ import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../common/permissions.guard';
 import { RequirePermissions } from '../common/permissions.decorator';
-import { EntriesService } from './entries.service';
+import { EntriesService, ReportQuery } from './entries.service';
 import { CreateEntryDto } from './dto/create-entry.dto';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -35,16 +35,28 @@ export class EntriesController {
     return this.entriesService.findMine(req.user);
   }
 
-  @RequirePermissions('viewAllReports')
+  @Get('active')
+  findActive(@Req() req: any) {
+    return this.entriesService.findActiveForActor(req.user);
+  }
+
+  @Put('active/:id')
+  updateActive(
+    @Param('id') id: string,
+    @Body() dto: CreateEntryDto,
+    @Req() req: any,
+  ) {
+    return this.entriesService.updateActive(id, dto, req.user);
+  }
+
   @Get()
-  findAll(@Query() query: { name?: string; startDate?: string; endDate?: string }, @Req() req: any) {
+  findAll(@Query() query: ReportQuery, @Req() req: any) {
     return this.entriesService.findAll(query, req.user);
   }
 
-  @RequirePermissions('viewAllReports')
   @Get('export')
   async export(
-    @Query() query: { name?: string; startDate?: string; endDate?: string },
+    @Query() query: ReportQuery,
     @Req() req: any,
     @Res() res: Response,
   ) {
@@ -56,10 +68,9 @@ export class EntriesController {
     res.send(buffer);
   }
 
-  @RequirePermissions('viewAllReports')
   @Get('export/pdf')
   async exportPdf(
-    @Query() query: { name?: string; startDate?: string; endDate?: string },
+    @Query() query: ReportQuery,
     @Req() req: any,
     @Res() res: Response,
   ) {
@@ -71,7 +82,6 @@ export class EntriesController {
     res.send(buffer);
   }
 
-  @RequirePermissions('viewAllReports')
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req: any) {
     return this.entriesService.findOne(id, req.user);
@@ -87,7 +97,7 @@ export class EntriesController {
 
   @RequirePermissions('manageReports')
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.entriesService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.entriesService.remove(id, req.user);
   }
 }

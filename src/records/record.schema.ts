@@ -29,8 +29,7 @@ export class RecordEntry {
 
   // The admin account(s) this record is assigned to. Same one/several/every-admin
   // shape as before, validated against User documents with role 'admin'. Saving a record
-  // grants the admin(s) and each field's user visibility on that field, and flips its
-  // userOnlyEdit on so the admin can see but not edit it (see RecordsService.applyFieldAccess).
+  // marks each assigned field as user-owned work, so admins see it read-only.
   @Prop({ type: [Types.ObjectId], ref: 'User', required: true })
   adminIds: Types.ObjectId[];
 }

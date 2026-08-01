@@ -88,7 +88,7 @@ export class EntryHistoryItem {
 
 export const EntryHistoryItemSchema = SchemaFactory.createForClass(EntryHistoryItem);
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, optimisticConcurrency: true })
 export class Entry {
   @Prop({ required: true, trim: true })
   name: string;
@@ -107,8 +107,31 @@ export class Entry {
   @Prop({ required: true })
   finalTotal: number;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  createdBy: Types.ObjectId;
+  // Kept for compatibility with older data. New reports are scoped per team
+  // through teamAdminId rather than sharing one global active document.
+  @Prop({ default: false })
+  isActive: boolean;
+
+  // Older records may not have creator metadata. Keep that history unknown rather
+  // than assigning it to whichever collaborator happens to save the record next.
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy?: Types.ObjectId;
+
+  // Kept for compatibility with account-based reports. Team reports store the
+  // team's admin id here; authorization uses teamAdminId below.
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  ownerAccountId?: Types.ObjectId;
+
+  @Prop({ enum: ['user', 'admin'] })
+  ownerRole?: 'user' | 'admin';
+
+  // The admin team this report belongs to. This is the canonical report identity:
+  // the admin and every assigned user read and update the same document.
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  teamAdminId?: Types.ObjectId;
+
+  @Prop({ trim: true })
+  teamName?: string;
 
   // Set on update() only — absent for entries that have never been edited.
   @Prop({ type: Types.ObjectId, ref: 'User' })
@@ -120,7 +143,8 @@ export class Entry {
 }
 
 export const EntrySchema = SchemaFactory.createForClass(Entry);
-EntrySchema.index(
-  { name: 1 },
-  { unique: true, collation: { locale: 'en', strength: 2 } },
-);
+// The unique team index is created by EntriesService after legacy per-account
+// documents have been consolidated. Declaring it here would make Mongoose race
+// that startup migration when an existing database still contains duplicates.
+EntrySchema.index({ teamAdminId: 1, updatedAt: -1 });
+EntrySchema.index({ teamName: 1, ownerRole: 1 });

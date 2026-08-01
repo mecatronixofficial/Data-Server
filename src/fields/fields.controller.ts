@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../common/permissions.guard';
 import { RequirePermissions } from '../common/permissions.decorator';
@@ -11,7 +11,6 @@ import { UpdateFinalTotalSettingsDto } from './dto/update-final-total-settings.d
 export class FieldsController {
   constructor(private fieldsService: FieldsService) {}
 
-  @RequirePermissions('manageFields')
   @Get()
   findAll() {
     return this.fieldsService.findAll();
@@ -30,14 +29,7 @@ export class FieldsController {
     return this.fieldsService.updateFinalTotalSettings(dto);
   }
 
-  @Get('mine')
-  findMine(@Req() req: any) {
-    return this.fieldsService.findVisibleToUser(req.user.sub);
-  }
-
-  // Any authenticated account — admin/user need this to know which fields are locked
-  // to them even when the field itself is outside their own visibleUserIds (e.g. an
-  // admin viewing a teammate's entry in Reports).
+  // Any authenticated account can retrieve the edit assignment for every field.
   @Get('edit-locks')
   findEditLocks() {
     return this.fieldsService.findEditLocks();
