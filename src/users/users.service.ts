@@ -3,7 +3,6 @@ import {
   ConflictException,
   NotFoundException,
   UnauthorizedException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -12,7 +11,7 @@ import { User, UserDocument } from './user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 
 @Injectable()
-export class UsersService implements OnModuleInit {
+export class UsersService {
   constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
 
   private normalizeTeamName(value: string) {
@@ -33,10 +32,6 @@ export class UsersService implements OnModuleInit {
       teamName: this.exactTeamName(teamName),
       ...(exceptAdminId ? { teamAdminId: { $ne: new Types.ObjectId(exceptAdminId) } } : {}),
     });
-  }
-
-  async onModuleInit() {
-    await this.ensureTeamNames();
   }
 
   async ensureTeamNames() {

@@ -3,7 +3,6 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -47,73 +46,140 @@ function applyOperator(a: number, b: number, op: string) {
 }
 
 @Injectable()
-export class EntriesService implements OnModuleInit {
+export class EntriesService {
   constructor(
     @InjectModel(Entry.name) private entryModel: Model<EntryDocument>,
     private fieldsService: FieldsService,
     private usersService: UsersService,
   ) {}
 
-  async onModuleInit() {
-    await this.usersService.ensureTeamNames();
-    // Remove the old global/per-account uniqueness before consolidating existing
-    // data. The replacement unique team index is created after the migration.
+  private async teamReportMigrationAlreadyApplied() {
+    const legacyEntries = await this.entryModel.countDocuments({
+      $or: [{ teamAdminId: null }, { teamAdminId: { $exists: false } }],
+    });
+    if (legacyEntries > 0) return false;
+
+    const duplicateTeams = await this.entryModel.aggregate([
+      { $match: { teamAdminId: { $type: 'objectId' } } },
+      { $group: { _id: '$teamAdminId', count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } },
+      { $limit: 1 },
+    ]);
+    if (duplicateTeams.length > 0) return false;
+
     const indexes = await this.entryModel.collection.indexes();
-    for (const index of indexes) {
-      const keys = Object.keys(index.key || {});
-      const obsolete = index.name === 'name_1'
-        || index.name === 'isActive_1'
-        || (Boolean(index.unique) && keys.length === 1 && keys[0] === 'ownerAccountId');
-      if (obsolete && index.name) {
-        try {
-          await this.entryModel.collection.dropIndex(index.name);
-        } catch (error: any) {
-          // Multiple serverless instances can run this migration together.
-          if (error?.code !== 27 && error?.codeName !== 'IndexNotFound') throw error;
-        }
-      }
+    const uniqueTeamIndex = indexes.find((index) => index.name === 'unique_team_report');
+    return Boolean(uniqueTeamIndex?.unique);
+  }
+
+  async migrateTeamReports() {
+    const migrationId = '20260801-team-report-v1';
+    const migrations = this.entryModel.db.collection('app_migrations');
+    const previous = await migrations.findOne({ _id: migrationId } as any);
+    if (previous?.status === 'complete') {
+      return { migrationId, status: 'already-complete' as const };
+    }
+    if (previous?.status === 'running') {
+      throw new Error(`Migration ${migrationId} is already running`);
     }
 
-    // Attach unambiguous legacy reports to a team. Ambiguous records stay visible
-    // to superadmin as "Legacy / Unassigned" instead of risking a wrong merge.
-    const legacyEntries = await this.entryModel
-      .find({ teamAdminId: null })
-      .sort({ updatedAt: -1 });
-    for (const entry of legacyEntries) {
-      const context = await this.usersService.getLegacyReportContext(
-        entry.name,
-        entry.createdBy ? String(entry.createdBy) : undefined,
+    const startedAt = new Date();
+    if (previous) {
+      const lock = await migrations.updateOne(
+        { _id: migrationId, status: previous.status } as any,
+        { $set: { status: 'running', startedAt }, $unset: { completedAt: '', error: '' } },
       );
-      if (!context) continue;
-      await this.entryModel.updateOne(
-        { _id: entry._id, teamAdminId: null },
-        {
-          $set: {
-            name: context.teamName,
-            ownerAccountId: new Types.ObjectId(context.teamAdminId),
-            ownerRole: 'admin',
-            teamAdminId: new Types.ObjectId(context.teamAdminId),
-            teamName: context.teamName,
-          },
-        },
-      );
-    }
-
-    await this.consolidateTeamReports();
-    try {
-      await this.entryModel.collection.createIndex(
-        { teamAdminId: 1 },
-        {
-          name: 'unique_team_report',
-          unique: true,
-          partialFilterExpression: { teamAdminId: { $type: 'objectId' } },
-        },
-      );
-    } catch (error: any) {
-      // Another instance may have finished the same migration concurrently.
-      if (error?.codeName !== 'IndexOptionsConflict' && error?.code !== 85 && error?.code !== 86) {
+      if (lock.modifiedCount !== 1) throw new Error(`Could not acquire migration lock for ${migrationId}`);
+    } else {
+      try {
+        await migrations.insertOne({ _id: migrationId, status: 'running', startedAt } as any);
+      } catch (error: any) {
+        if (error?.code === 11000) throw new Error(`Migration ${migrationId} is already running`);
         throw error;
       }
+    }
+
+    try {
+      await this.usersService.ensureTeamNames();
+      if (await this.teamReportMigrationAlreadyApplied()) {
+        const completedAt = new Date();
+        await migrations.updateOne(
+          { _id: migrationId } as any,
+          { $set: { status: 'complete', completedAt }, $unset: { error: '' } },
+        );
+        return { migrationId, status: 'verified-complete' as const, completedAt };
+      }
+
+      // Remove the old global/per-account uniqueness before consolidating existing
+      // data. The replacement unique team index is created after the migration.
+      const indexes = await this.entryModel.collection.indexes();
+      for (const index of indexes) {
+        const keys = Object.keys(index.key || {});
+        const obsolete = index.name === 'name_1'
+          || index.name === 'isActive_1'
+          || (Boolean(index.unique) && keys.length === 1 && keys[0] === 'ownerAccountId');
+        if (obsolete && index.name) {
+          try {
+            await this.entryModel.collection.dropIndex(index.name);
+          } catch (error: any) {
+            if (error?.code !== 27 && error?.codeName !== 'IndexNotFound') throw error;
+          }
+        }
+      }
+
+      // Attach unambiguous legacy reports to a team. Ambiguous records stay visible
+      // to superadmin instead of risking a wrong merge.
+      const legacyEntries = await this.entryModel
+        .find({ teamAdminId: null })
+        .sort({ updatedAt: -1 });
+      for (const entry of legacyEntries) {
+        const context = await this.usersService.getLegacyReportContext(
+          entry.name,
+          entry.createdBy ? String(entry.createdBy) : undefined,
+        );
+        if (!context) continue;
+        await this.entryModel.updateOne(
+          { _id: entry._id, teamAdminId: null },
+          {
+            $set: {
+              name: context.teamName,
+              ownerAccountId: new Types.ObjectId(context.teamAdminId),
+              ownerRole: 'admin',
+              teamAdminId: new Types.ObjectId(context.teamAdminId),
+              teamName: context.teamName,
+            },
+          },
+        );
+      }
+
+      await this.consolidateTeamReports();
+      try {
+        await this.entryModel.collection.createIndex(
+          { teamAdminId: 1 },
+          {
+            name: 'unique_team_report',
+            unique: true,
+            partialFilterExpression: { teamAdminId: { $type: 'objectId' } },
+          },
+        );
+      } catch (error: any) {
+        if (error?.codeName !== 'IndexOptionsConflict' && error?.code !== 85 && error?.code !== 86) {
+          throw error;
+        }
+      }
+
+      const completedAt = new Date();
+      await migrations.updateOne(
+        { _id: migrationId } as any,
+        { $set: { status: 'complete', completedAt }, $unset: { error: '' } },
+      );
+      return { migrationId, status: 'complete' as const, completedAt };
+    } catch (error: any) {
+      await migrations.updateOne(
+        { _id: migrationId } as any,
+        { $set: { status: 'failed', failedAt: new Date(), error: String(error?.message || error) } },
+      );
+      throw error;
     }
   }
 
