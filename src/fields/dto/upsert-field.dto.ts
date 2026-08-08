@@ -1,10 +1,11 @@
-import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsMongoId, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ICON_KEYS } from '../icon-keys';
 import { COLOR_KEYS } from '../color-keys';
 
 export class UpsertFieldDto {
   @IsNotEmpty()
   @IsString()
+  @MaxLength(120)
   name: string;
 
   @IsOptional()
@@ -13,7 +14,9 @@ export class UpsertFieldDto {
 
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(200)
   @IsString({ each: true })
+  @MaxLength(120, { each: true })
   boxNames: string[];
 
   @IsOptional()
@@ -35,11 +38,13 @@ export class UpsertFieldDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(200)
   @IsIn([...ICON_KEYS, ''], { each: true })
   boxIcons?: string[];
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(200)
   @IsIn([...COLOR_KEYS, ''], { each: true })
   boxColors?: string[];
 
@@ -47,6 +52,7 @@ export class UpsertFieldDto {
   // (and defaulted to Name/Value when empty) in FieldsService.normalize().
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(200)
   boxFields?: Array<Array<{
     label: string;
     type: string;
@@ -67,6 +73,7 @@ export class UpsertFieldDto {
   // everyone. Sanitized against real accounts in FieldsService.normalize().
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @ArrayMaxSize(500)
+  @IsMongoId({ each: true })
   visibleTo?: string[];
 }

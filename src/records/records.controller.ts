@@ -4,6 +4,7 @@ import { PermissionsGuard } from '../common/permissions.guard';
 import { RequirePermissions } from '../common/permissions.decorator';
 import { RecordsService } from './records.service';
 import { UpsertRecordDto } from './dto/upsert-record.dto';
+import { MongoIdPipe } from '../common/mongo-id.pipe';
 
 // Management routes are gated behind manageFields (superadmin only, same as /fields)
 // since a record is always assigned to a field the superadmin manages. /mine has no
@@ -34,13 +35,13 @@ export class RecordsController {
 
   @RequirePermissions('manageFields')
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: UpsertRecordDto) {
+  update(@Param('id', MongoIdPipe) id: string, @Body() dto: UpsertRecordDto) {
     return this.recordsService.update(id, dto);
   }
 
   @RequirePermissions('manageFields')
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  remove(@Param('id', MongoIdPipe) id: string) {
     return this.recordsService.remove(id);
   }
 }

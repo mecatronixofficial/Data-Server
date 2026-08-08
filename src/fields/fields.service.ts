@@ -156,8 +156,19 @@ export class FieldsService {
       if (duplicate) throw new ConflictException('A field with this name already exists');
     }
 
+    const previousName = field.name;
     field.set(normalized);
-    return field.save();
+    const saved = await field.save();
+    if (previousName !== saved.name) {
+      // Field names are the stable key used by saved report snapshots. Keep
+      // existing values attached when a superadmin renames a field.
+      await this.fieldModel.db.collection('entries').updateMany(
+        { 'fields.name': previousName },
+        { $set: { 'fields.$[field].name': saved.name } },
+        { arrayFilters: [{ 'field.name': previousName }] },
+      );
+    }
+    return saved;
   }
 
   async remove(id: string) {

@@ -11,6 +11,13 @@ export class User {
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email: string;
 
+  // Human-readable login id. userIdKey enforces case-insensitive uniqueness.
+  @Prop({ trim: true })
+  userId?: string;
+
+  @Prop({ select: false })
+  userIdKey?: string;
+
   @Prop({ required: true })
   password: string;
 
@@ -33,9 +40,40 @@ export class User {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  @Prop({ default: false })
+  mfaEnabled: boolean;
+
+  // Only Super Admin may opt their own account out. Admin and User accounts
+  // always require MFA regardless of this stored value.
+  @Prop({ default: true })
+  mfaRequired: boolean;
+
+  // MFA secrets and recovery-code hashes are never returned by ordinary user
+  // queries. AuthService accesses them only through the dedicated service methods.
+  @Prop({ select: false })
+  mfaSecretEncrypted?: string;
+
+  @Prop({ type: [String], select: false, default: undefined })
+  mfaRecoveryCodeHashes?: string[];
+
+  @Prop({ select: false })
+  mfaLastUsedStep?: number;
+
+  @Prop()
+  mfaSetupAt?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+UserSchema.index(
+  { userIdKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { userIdKey: { $type: 'string' } },
+  },
+);
+UserSchema.index({ assignedAdminId: 1, role: 1 });
+UserSchema.index({ role: 1, isActive: 1, createdAt: -1 });
 UserSchema.index(
   { teamNameKey: 1 },
   {

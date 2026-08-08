@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -12,6 +13,7 @@ import { CreateEntryDto, EntryFieldInputDto } from './dto/create-entry.dto';
 import { FieldsService } from '../fields/fields.service';
 import { Field } from '../fields/field.schema';
 import { UsersService } from '../users/users.service';
+import { ReportQueryDto } from './dto/report-query.dto';
 
 export type ReportActor = {
   sub: string;
@@ -19,14 +21,7 @@ export type ReportActor = {
   name: string;
   permissions?: Record<string, boolean>;
 };
-export type ReportQuery = {
-  name?: string;
-  startDate?: string;
-  endDate?: string;
-  scope?: 'mine' | 'team' | 'all';
-  ownerRole?: 'admin' | 'user';
-  teamName?: string;
-};
+export type ReportQuery = ReportQueryDto;
 
 function sum(nums: number[]) {
   return nums.reduce((total, value) => total + value, 0);
@@ -338,10 +333,18 @@ export class EntriesService {
   // saved value (update) or start blank (create), no matter what was submitted.
   private async resolveFields(
     inputs: EntryFieldInputDto[],
-    actorRole: string,
+    actor: ReportActor,
     existingByName?: Map<string, EntryField>,
+    changedBoxesByName?: Map<string, Set<number>>,
   ) {
-    const canonical: Field[] = await this.fieldsService.findAll();
+    const submittedNames = inputs.map((input) => input.name.trim());
+    if (new Set(submittedNames).size !== submittedNames.length) {
+      throw new BadRequestException('Each field may only be submitted once');
+    }
+
+    // Resolve only fields this account can see. This makes the visibility
+    // allowlist an API authorization boundary, not just a browser preference.
+    const canonical: Field[] = await this.fieldsService.findAll(actor);
     const canonicalByName = new Map(canonical.map((field) => [field.name, field]));
 
     const fields: EntryField[] = inputs.map((input) => {
@@ -349,19 +352,37 @@ export class EntriesService {
       if (!field) {
         throw new ForbiddenException(`Field "${input.name}" does not exist`);
       }
-      const allowed = this.canEditField(actorRole, field);
+      if (input.boxes.length !== field.boxNames.length) {
+        throw new BadRequestException(`Field "${field.name}" has an invalid number of boxes`);
+      }
+      const allowed = this.canEditField(actor.role, field);
       const existing = existingByName?.get(field.name);
+      const changedBoxIndexes = changedBoxesByName?.get(field.name);
+      if (changedBoxIndexes) {
+        for (const index of changedBoxIndexes) {
+          if (index >= field.boxNames.length) {
+            throw new BadRequestException(`Field "${field.name}" has an invalid changed box index`);
+          }
+        }
+      }
+      const shouldApplyBox = (index: number) => (
+        allowed && (changedBoxesByName === undefined || Boolean(changedBoxIndexes?.has(index)))
+      );
       const boxes = field.boxNames.map((_, index) => {
-        if (!allowed) return Number(existing?.boxes?.[index]) || 0;
+        if (!shouldApplyBox(index)) return Number(existing?.boxes?.[index]) || 0;
         return input.boxes[index] !== undefined
           ? Number(input.boxes[index]) || 0
           : Number(existing?.boxes?.[index]) || 0;
       });
       const details = field.boxNames.map((_, index) => {
-        if (!allowed) return existing?.details?.[index] || [];
+        if (!shouldApplyBox(index)) return existing?.details?.[index] || [];
         return input.details?.[index] || existing?.details?.[index] || [];
       });
-      const operatorInput = allowed ? input.operator : existing?.operator;
+      // The current entry UI does not edit grouped operators. Preserve the
+      // latest saved operator during a partial multi-device update.
+      const operatorInput = allowed && changedBoxesByName === undefined
+        ? input.operator
+        : existing?.operator;
 
       const base = {
         name: field.name,
@@ -515,7 +536,7 @@ export class EntriesService {
       return this.update(String(legacy._id), dto, actor);
     }
 
-    const fields = await this.resolveFields(dto.fields, actor.role);
+    const fields = await this.resolveFields(dto.fields, actor);
     const { sign } = await this.fieldsService.getFinalTotalSettings();
     const { finalTotal, fieldOperators } = this.combineTotals(fields, sign);
 
@@ -577,6 +598,50 @@ export class EntriesService {
     return active;
   }
 
+  async getWorkspace(actor: ReportActor) {
+    const context = actor.role === 'superadmin'
+      ? null
+      : await this.usersService.getReportContext(actor.sub);
+    const activePromise = context
+      ? this.entryModel.findOne({
+          teamAdminId: new Types.ObjectId(context.teamAdminId),
+        })
+      : Promise.resolve(null);
+    const [fields, finalTotalSettings, activeEntry] = await Promise.all([
+      this.fieldsService.findAll(actor),
+      this.fieldsService.getFinalTotalSettings(),
+      activePromise,
+    ]);
+    return {
+      viewer: {
+        name: actor.name,
+        role: actor.role,
+        teamName: context?.teamName || '',
+      },
+      fields,
+      finalTotalSettings,
+      activeEntry,
+    };
+  }
+
+  async findVersion(id: string, actor: ReportActor) {
+    const entry = await this.entryModel
+      .findById(id)
+      .select('_id teamAdminId updatedAt __v');
+    if (!entry) throw new NotFoundException('Entry not found');
+    if (actor.role !== 'superadmin') {
+      const context = await this.usersService.getReportContext(actor.sub);
+      if (String(entry.teamAdminId) !== context.teamAdminId) {
+        throw new NotFoundException('Entry not found');
+      }
+    }
+    return {
+      _id: entry._id,
+      updatedAt: (entry as any).updatedAt,
+      __v: (entry as any).__v,
+    };
+  }
+
   async updateActive(
     expectedId: string,
     dto: CreateEntryDto,
@@ -606,12 +671,16 @@ export class EntriesService {
   private buildFilter(query: ReportQuery) {
     const filter: any = {};
     if (query.name) {
-      filter.name = { $regex: query.name, $options: 'i' };
+      filter.name = { $regex: this.escapeRegex(query.name.trim()), $options: 'i' };
     }
     if (query.startDate || query.endDate) {
       filter.date = {};
-      if (query.startDate) filter.date.$gte = new Date(query.startDate);
-      if (query.endDate) filter.date.$lte = new Date(query.endDate);
+      if (query.startDate) filter.date.$gte = new Date(`${query.startDate}T00:00:00.000Z`);
+      if (query.endDate) {
+        const exclusiveEnd = new Date(`${query.endDate}T00:00:00.000Z`);
+        exclusiveEnd.setUTCDate(exclusiveEnd.getUTCDate() + 1);
+        filter.date.$lt = exclusiveEnd;
+      }
     }
     return filter;
   }
@@ -620,10 +689,13 @@ export class EntriesService {
     const filter = await this.scopeFilterForActor(this.buildFilter(query), actor, query);
     return this.entryModel
       .find(filter)
+      // The report table needs box totals, not potentially large detail rows or
+      // history. Editors fetch the complete document through findOne first.
+      .select('-history -fields.details -fields.boxFields')
       .populate('createdBy', 'name email role')
       .populate('updatedBy', 'name email role')
-      .populate('history.updatedBy', 'name email role')
-      .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1 })
+      .lean();
   }
 
   async findOne(id: string, actor: ReportActor) {
@@ -710,8 +782,31 @@ export class EntriesService {
     // The team name identifies this working record and remains stable.
     const normalizedName = context?.teamName || entry.teamName || entry.name;
 
+    if (dto.changedFields && dto.changedFields.length === 0 && dto.dateChanged !== true) {
+      return entry.populate(
+        ['createdBy', 'updatedBy', 'history.updatedBy'].map((path) => ({ path, select: 'name email role' })),
+      );
+    }
+
+    const submittedFieldNames = new Set(dto.fields.map((field) => field.name.trim()));
+    const changedBoxesByName = dto.changedFields
+      ? new Map(dto.changedFields.map((field) => [field.name.trim(), new Set(field.boxIndexes)]))
+      : undefined;
+    if (changedBoxesByName) {
+      for (const fieldName of changedBoxesByName.keys()) {
+        if (!submittedFieldNames.has(fieldName)) {
+          throw new BadRequestException(`Changed field "${fieldName}" was not submitted`);
+        }
+      }
+    }
+
     const existingByName = new Map(entry.fields.map((field) => [field.name, field]));
-    const resolvedFields = await this.resolveFields(dto.fields, actor.role, existingByName);
+    const resolvedFields = await this.resolveFields(
+      dto.fields,
+      actor,
+      existingByName,
+      changedBoxesByName,
+    );
     // A collaborator may only receive a subset of the configured fields. Preserve
     // every unsubmitted field exactly as it was so another account's saved work is
     // never erased, then append any newly configured submitted fields.
@@ -723,7 +818,9 @@ export class EntriesService {
     ];
     const { sign } = await this.fieldsService.getFinalTotalSettings();
     const { finalTotal, fieldOperators } = this.combineTotals(fields, sign);
-    const newDate = new Date(dto.date);
+    const newDate = dto.changedFields && dto.dateChanged !== true
+      ? entry.date
+      : new Date(dto.date);
     const changes = this.diffEntry(entry, normalizedName, newDate, fields);
 
     entry.set({

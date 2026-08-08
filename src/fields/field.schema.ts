@@ -81,3 +81,4 @@ export class Field {
 }
 
 export const FieldSchema = SchemaFactory.createForClass(Field);
+FieldSchema.index({ order: 1, createdAt: 1 });

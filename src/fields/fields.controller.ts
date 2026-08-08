@@ -5,6 +5,7 @@ import { RequirePermissions } from '../common/permissions.decorator';
 import { FieldsService } from './fields.service';
 import { UpsertFieldDto } from './dto/upsert-field.dto';
 import { UpdateFinalTotalSettingsDto } from './dto/update-final-total-settings.dto';
+import { MongoIdPipe } from '../common/mongo-id.pipe';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('fields')
@@ -45,13 +46,13 @@ export class FieldsController {
 
   @RequirePermissions('manageFields')
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: UpsertFieldDto) {
+  update(@Param('id', MongoIdPipe) id: string, @Body() dto: UpsertFieldDto) {
     return this.fieldsService.update(id, dto);
   }
 
   @RequirePermissions('manageFields')
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  remove(@Param('id', MongoIdPipe) id: string) {
     return this.fieldsService.remove(id);
   }
 }
