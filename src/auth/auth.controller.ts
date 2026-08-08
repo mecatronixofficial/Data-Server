@@ -16,8 +16,11 @@ import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { MfaVerifyDto } from './dto/mfa-verify.dto';
+import { UpdateMfaPolicyDto } from './dto/update-mfa-policy.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { UsersService } from '../users/users.service';
+import { PermissionsGuard } from '../common/permissions.guard';
+import { RequirePermissions } from '../common/permissions.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -50,6 +53,21 @@ export class AuthController {
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const user = await this.authService.validateUser(dto.email, dto.password);
     this.clearAuthCookies(res);
+    const policy = await this.authService.getMfaPolicy();
+    if (!policy.enabled) {
+      const { accessToken, refreshToken } = await this.authService.signTokens(user, {
+        mfaBypassed: true,
+      });
+      this.setAuthCookies(res, accessToken, refreshToken);
+      return {
+        id: user._id,
+        userId: user.userId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        mfaRequired: false,
+      };
+    }
     return this.authService.beginMfaLogin(user);
   }
 
@@ -92,8 +110,16 @@ export class AuthController {
       }
       const user = await this.usersService.findById(payload.sub);
       if (user.isActive === false) throw new Error('Account is inactive');
-      if (user.mfaEnabled !== true) throw new Error('MFA enrollment required');
-      const { accessToken, refreshToken } = await this.authService.signTokens(user);
+      const policy = await this.authService.getMfaPolicy();
+      if (policy.enabled && payload.mfaBypassed === true) {
+        throw new Error('MFA verification is required again');
+      }
+      if (policy.enabled && user.mfaEnabled !== true) {
+        throw new Error('MFA enrollment required');
+      }
+      const { accessToken, refreshToken } = await this.authService.signTokens(user, {
+        mfaBypassed: payload.mfaBypassed === true,
+      });
       this.setAuthCookies(res, accessToken, refreshToken);
       return { message: 'Refreshed' };
     } catch {
@@ -120,6 +146,20 @@ export class AuthController {
       mfaEnabled: user.mfaEnabled === true,
       permissions: req.user.permissions,
     };
+  }
+
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('manageUsers')
+  @Get('mfa/settings')
+  getMfaSettings() {
+    return this.authService.getMfaPolicy();
+  }
+
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('manageUsers')
+  @Put('mfa/settings')
+  updateMfaSettings(@Body() dto: UpdateMfaPolicyDto, @Req() req: any) {
+    return this.authService.updateMfaPolicy(dto.enabled, req.user.sub);
   }
 
   @UseGuards(JwtAuthGuard)

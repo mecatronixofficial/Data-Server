@@ -12,6 +12,7 @@ import {
 import QRCode from 'qrcode';
 import { UsersService } from '../users/users.service';
 import { permissionsForRole } from '../common/permissions';
+import { MfaPolicyService } from './mfa-policy.service';
 
 type MfaChallengePayload = {
   sub: string;
@@ -24,7 +25,16 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private mfaPolicyService: MfaPolicyService,
   ) {}
+
+  getMfaPolicy() {
+    return this.mfaPolicyService.getPolicy();
+  }
+
+  updateMfaPolicy(enabled: boolean, actorId: string) {
+    return this.mfaPolicyService.updatePolicy(enabled, actorId);
+  }
 
   async validateUser(identifier: string, password: string) {
     const user = await this.usersService.findByLoginIdentifier(identifier);
@@ -119,7 +129,10 @@ export class AuthService {
     return { user, recoveryCodes: undefined };
   }
 
-  async signTokens(user: { _id: any; name: string; role: string }) {
+  async signTokens(
+    user: { _id: any; name: string; role: string },
+    options: { mfaBypassed?: boolean } = {},
+  ) {
     const permissions = permissionsForRole(user.role);
     const accessPayload = {
       sub: user._id,
@@ -128,8 +141,14 @@ export class AuthService {
       permissions,
       tokenType: 'access',
       mfaVerified: true,
+      mfaBypassed: options.mfaBypassed === true,
     };
-    const refreshPayload = { sub: user._id, tokenType: 'refresh', mfaVerified: true };
+    const refreshPayload = {
+      sub: user._id,
+      tokenType: 'refresh',
+      mfaVerified: true,
+      mfaBypassed: options.mfaBypassed === true,
+    };
 
     const accessToken = await this.jwtService.signAsync(accessPayload, {
       secret: process.env.JWT_ACCESS_SECRET,
