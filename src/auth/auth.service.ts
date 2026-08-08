@@ -12,7 +12,6 @@ import {
 import QRCode from 'qrcode';
 import { UsersService } from '../users/users.service';
 import { permissionsForRole } from '../common/permissions';
-import { MfaPolicyService } from './mfa-policy.service';
 
 type MfaChallengePayload = {
   sub: string;
@@ -25,15 +24,18 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
-    private mfaPolicyService: MfaPolicyService,
   ) {}
 
-  getMfaPolicy() {
-    return this.mfaPolicyService.getPolicy();
+  mfaRequiredFor(user: { role: string; mfaRequired?: boolean }) {
+    return user.role !== 'superadmin' || user.mfaRequired !== false;
+  }
+
+  getMfaPolicy(actorId: string) {
+    return this.usersService.getOwnMfaSettings(actorId);
   }
 
   updateMfaPolicy(enabled: boolean, actorId: string) {
-    return this.mfaPolicyService.updatePolicy(enabled, actorId);
+    return this.usersService.updateOwnMfaSettings(actorId, enabled);
   }
 
   async validateUser(identifier: string, password: string) {

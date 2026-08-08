@@ -415,6 +415,39 @@ export class UsersService implements OnApplicationBootstrap {
     return { message: 'Authenticator reset. The account must enroll again at next sign-in.' };
   }
 
+  async getOwnMfaSettings(id: string) {
+    const user = await this.userModel.findOne({ _id: id, role: 'superadmin' })
+      .select('mfaRequired');
+    if (!user) throw new NotFoundException('Super Admin account not found');
+    return { enabled: user.mfaRequired !== false };
+  }
+
+  async updateOwnMfaSettings(id: string, enabled: boolean) {
+    const user = await this.userModel.findOneAndUpdate(
+      { _id: id, role: 'superadmin' },
+      {
+        $set: {
+          mfaRequired: enabled,
+          mfaEnabled: false,
+        },
+        // Toggling either way invalidates only this Super Admin's previous
+        // authenticator. Enabling therefore guarantees a fresh QR next login.
+        $unset: {
+          mfaSecretEncrypted: 1,
+          mfaRecoveryCodeHashes: 1,
+          mfaLastUsedStep: 1,
+          mfaSetupAt: 1,
+        },
+      },
+      { new: true },
+    ).select('-password');
+    if (!user) throw new NotFoundException('Super Admin account not found');
+    return {
+      enabled: user.mfaRequired !== false,
+      newEnrollmentRequired: enabled,
+    };
+  }
+
   async updateProfile(id: string, dto: { name?: string; email?: string; teamName?: string }) {
     const user = await this.userModel.findById(id).select('+teamNameKey');
     if (!user) throw new NotFoundException('User not found');

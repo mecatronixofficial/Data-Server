@@ -53,8 +53,7 @@ export class AuthController {
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const user = await this.authService.validateUser(dto.email, dto.password);
     this.clearAuthCookies(res);
-    const policy = await this.authService.getMfaPolicy();
-    if (!policy.enabled) {
+    if (!this.authService.mfaRequiredFor(user)) {
       const { accessToken, refreshToken } = await this.authService.signTokens(user, {
         mfaBypassed: true,
       });
@@ -110,11 +109,11 @@ export class AuthController {
       }
       const user = await this.usersService.findById(payload.sub);
       if (user.isActive === false) throw new Error('Account is inactive');
-      const policy = await this.authService.getMfaPolicy();
-      if (policy.enabled && payload.mfaBypassed === true) {
+      const mfaRequired = this.authService.mfaRequiredFor(user);
+      if (mfaRequired && payload.mfaBypassed === true) {
         throw new Error('MFA verification is required again');
       }
-      if (policy.enabled && user.mfaEnabled !== true) {
+      if (mfaRequired && user.mfaEnabled !== true) {
         throw new Error('MFA enrollment required');
       }
       const { accessToken, refreshToken } = await this.authService.signTokens(user, {
@@ -151,8 +150,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('manageUsers')
   @Get('mfa/settings')
-  getMfaSettings() {
-    return this.authService.getMfaPolicy();
+  getMfaSettings(@Req() req: any) {
+    return this.authService.getMfaPolicy(req.user.sub);
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)

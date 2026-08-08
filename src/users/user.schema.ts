@@ -44,6 +44,11 @@ export class User {
   @Prop({ default: false })
   mfaEnabled: boolean;
 
+  // Only Super Admin may opt their own account out. Admin and User accounts
+  // always require MFA regardless of this stored value.
+  @Prop({ default: true })
+  mfaRequired: boolean;
+
   // MFA secrets and recovery-code hashes are never returned by ordinary user
   // queries. AuthService accesses them only through the dedicated service methods.
   @Prop({ select: false })
