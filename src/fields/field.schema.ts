@@ -18,6 +18,12 @@ export class Field {
   @Prop({ default: '' })
   icon: string;
 
+  // Color key for this field's own accent (see COLOR_KEYS in color-keys.ts). Empty string
+  // means no override. Purely a visual accent (e.g. the entry-page card's top stripe) —
+  // it never changes the color the field's icon itself renders in.
+  @Prop({ default: '' })
+  color: string;
+
   // Icon key per box, parallel to boxNames.
   @Prop({ type: [String], default: [] })
   boxIcons: string[];
@@ -64,6 +70,14 @@ export class Field {
   // admin and the user assigned to them, each owning a different subset of fields.
   @Prop({ default: false })
   userOnlyEdit: boolean;
+
+  // Per-account visibility allowlist, holding 'user'/'admin' account ids. An empty array
+  // (the default) means visible to everyone. A non-empty array hides this field from every
+  // account except superadmin (never restricted) and the accounts listed here — see
+  // FieldsService.findAll(). Purely a view-level show/hide; it does not change who may
+  // edit the field (see userOnlyEdit above).
+  @Prop({ type: [String], default: [] })
+  visibleTo: string[];
 }
 
 export const FieldSchema = SchemaFactory.createForClass(Field);

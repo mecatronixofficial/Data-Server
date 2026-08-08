@@ -28,6 +28,11 @@ export class UpsertFieldDto {
   @IsIn([...ICON_KEYS, ''])
   icon?: string;
 
+  // This field's own accent color — separate from, and never applied to, the icon above.
+  @IsOptional()
+  @IsIn([...COLOR_KEYS, ''])
+  color?: string;
+
   @IsOptional()
   @IsArray()
   @IsIn([...ICON_KEYS, ''], { each: true })
@@ -57,4 +62,11 @@ export class UpsertFieldDto {
   @IsOptional()
   @IsBoolean()
   userOnlyEdit?: boolean;
+
+  // Account ids (user/admin) allowed to see this field. Empty/omitted = visible to
+  // everyone. Sanitized against real accounts in FieldsService.normalize().
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  visibleTo?: string[];
 }
