@@ -50,8 +50,21 @@ export class FieldsService {
     return { label: updated.label, icon: updated.icon, sign: updated.sign };
   }
 
-  async findAll() {
-    return this.fieldModel.find().sort({ order: 1, createdAt: 1 });
+  // `viewer` is omitted for internal/system callers (report merging, entry save
+  // resolution, migrations) which must always see every field regardless of who
+  // triggered them. Pass it only from request-driven reads.
+  async findAll(viewer?: { sub?: string; permissions?: Record<string, boolean> }) {
+    const fields = await this.fieldModel.find().sort({ order: 1, createdAt: 1 });
+    if (!viewer || viewer.permissions?.manageFields) return fields;
+    return fields.filter((field) => this.isVisibleTo(field, viewer.sub));
+  }
+
+  // A field with an empty visibleTo list is visible to everyone. A non-empty list
+  // hides the field from every account except the ones listed (superadmin/manageFields
+  // callers bypass this entirely — see findAll above).
+  private isVisibleTo(field: Field, accountId?: string) {
+    if (!field.visibleTo || field.visibleTo.length === 0) return true;
+    return Boolean(accountId) && field.visibleTo.some((id) => String(id) === String(accountId));
   }
 
   // Lightweight, name-keyed lock map available to any authenticated account.
@@ -76,6 +89,10 @@ export class FieldsService {
     const boxColors = boxNames.map((_, index) => dto.boxColors?.[index] || '');
 
     const userOnlyEdit = Boolean(dto.userOnlyEdit);
+
+    const visibleTo = Array.from(
+      new Set((dto.visibleTo || []).filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim())),
+    );
 
     const boxFields = boxNames.map((_, index) => {
       const sanitized: BoxFieldDef[] = (dto.boxFields?.[index] || [])
@@ -111,10 +128,12 @@ export class FieldsService {
       calcType,
       groupSplit,
       icon: dto.icon || '',
+      color: dto.color || '',
       boxIcons,
       boxColors,
       boxFields,
       userOnlyEdit,
+      visibleTo,
     };
   }
 

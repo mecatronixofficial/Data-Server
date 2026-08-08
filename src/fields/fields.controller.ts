@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../common/permissions.guard';
 import { RequirePermissions } from '../common/permissions.decorator';
@@ -11,9 +11,11 @@ import { UpdateFinalTotalSettingsDto } from './dto/update-final-total-settings.d
 export class FieldsController {
   constructor(private fieldsService: FieldsService) {}
 
+  // req.user is passed so a viewer without manageFields only receives fields
+  // visible to them (see FieldsService.findAll); superadmin always gets every field.
   @Get()
-  findAll() {
-    return this.fieldsService.findAll();
+  findAll(@Req() req: any) {
+    return this.fieldsService.findAll(req.user);
   }
 
   // Any authenticated account — the entry page and Reports table both show the
