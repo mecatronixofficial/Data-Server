@@ -7,6 +7,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { MongoIdPipe } from '../common/mongo-id.pipe';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePermissions('manageUsers')
@@ -25,22 +26,27 @@ export class UsersController {
   }
 
   @Put(':id')
-  updateProfile(@Param('id') id: string, @Body() dto: UpdateAccountDto) {
+  updateProfile(@Param('id', MongoIdPipe) id: string, @Body() dto: UpdateAccountDto) {
     return this.usersService.updateProfile(id, dto);
   }
 
   @Put(':id/password')
-  resetPassword(@Param('id') id: string, @Body() dto: ResetPasswordDto) {
+  resetPassword(@Param('id', MongoIdPipe) id: string, @Body() dto: ResetPasswordDto) {
     return this.usersService.resetPassword(id, dto.password);
   }
 
+  @Put(':id/mfa/reset')
+  resetMfa(@Param('id', MongoIdPipe) id: string, @Req() req: any) {
+    return this.usersService.resetMfa(id, req.user.sub);
+  }
+
   @Put(':id/status')
-  setActive(@Param('id') id: string, @Body() dto: UpdateStatusDto) {
-    return this.usersService.setActive(id, dto.isActive);
+  setActive(@Param('id', MongoIdPipe) id: string, @Body() dto: UpdateStatusDto, @Req() req: any) {
+    return this.usersService.setActive(id, dto.isActive, req.user.sub);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  remove(@Param('id', MongoIdPipe) id: string, @Req() req: any) {
+    return this.usersService.remove(id, req.user.sub);
   }
 }

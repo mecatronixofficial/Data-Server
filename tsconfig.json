@@ -4,7 +4,7 @@
     "declaration": false,
     "target": "ES2021",
     "outDir": "./dist",
-    "baseUrl": "./",
+    "rootDir": "./src",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "sourceMap": true,

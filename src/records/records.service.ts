@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { RecordEntry, RecordEntryDocument } from './record.schema';
@@ -57,16 +57,26 @@ export class RecordsService {
     return unique;
   }
 
-  private async assertUsersExist(userIds: string[]) {
+  private async assertUsersExist(userIds: string[], adminIds: string[]) {
     const unique = [...new Set(userIds)];
-    const count = await this.userModel.countDocuments({ _id: { $in: unique }, role: 'user' });
-    if (count !== unique.length) throw new NotFoundException('One or more users were not found');
+    const count = await this.userModel.countDocuments({
+      _id: { $in: unique },
+      role: 'user',
+      assignedAdminId: { $in: adminIds },
+      isActive: { $ne: false },
+    });
+    if (count !== unique.length) {
+      throw new BadRequestException('Every assigned user must be active and belong to a selected admin');
+    }
   }
 
-  private async validateFields(fields: { fieldId: string; userId: string }[]) {
+  private async validateFields(fields: { fieldId: string; userId: string }[], adminIds: string[]) {
+    if (new Set(fields.map((field) => field.fieldId)).size !== fields.length) {
+      throw new BadRequestException('Each field may only be assigned once per record');
+    }
     await Promise.all([
       this.assertFieldsExist(fields.map((f) => f.fieldId)),
-      this.assertUsersExist(fields.map((f) => f.userId)),
+      this.assertUsersExist(fields.map((f) => f.userId), adminIds),
     ]);
     return fields.map((f) => ({ fieldId: f.fieldId, userId: f.userId }));
   }
@@ -86,10 +96,8 @@ export class RecordsService {
   }
 
   async create(dto: UpsertRecordDto) {
-    const [fields, adminIds] = await Promise.all([
-      this.validateFields(dto.fields),
-      this.assertAdminsExist(dto.adminIds),
-    ]);
+    const adminIds = await this.assertAdminsExist(dto.adminIds);
+    const fields = await this.validateFields(dto.fields, adminIds);
     const created = new this.recordModel({ name: dto.name.trim(), fields, adminIds });
     await created.save();
     await this.applyFieldWorkAssignment(fields);
@@ -104,10 +112,8 @@ export class RecordsService {
     const record = await this.recordModel.findById(id);
     if (!record) throw new NotFoundException('Record not found');
 
-    const [fields, adminIds] = await Promise.all([
-      this.validateFields(dto.fields),
-      this.assertAdminsExist(dto.adminIds),
-    ]);
+    const adminIds = await this.assertAdminsExist(dto.adminIds);
+    const fields = await this.validateFields(dto.fields, adminIds);
     record.set({ name: dto.name.trim(), fields, adminIds });
     await record.save();
     await this.applyFieldWorkAssignment(fields);

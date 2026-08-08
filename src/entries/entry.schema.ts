@@ -148,3 +148,4 @@ export const EntrySchema = SchemaFactory.createForClass(Entry);
 // that startup migration when an existing database still contains duplicates.
 EntrySchema.index({ teamAdminId: 1, updatedAt: -1 });
 EntrySchema.index({ teamName: 1, ownerRole: 1 });
+EntrySchema.index({ updatedAt: -1 });

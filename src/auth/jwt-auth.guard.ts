@@ -22,6 +22,9 @@ export class JwtAuthGuard implements CanActivate {
       const payload = await this.jwtService.verifyAsync(token, {
         secret: process.env.JWT_ACCESS_SECRET,
       });
+      if (payload.tokenType !== 'access' || payload.mfaVerified !== true) {
+        throw new Error('Invalid token type');
+      }
       request.user = payload; // { sub, name, role }
       return true;
     } catch {

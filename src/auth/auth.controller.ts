@@ -15,6 +15,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { MfaVerifyDto } from './dto/mfa-verify.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { UsersService } from '../users/users.service';
 
@@ -26,47 +27,54 @@ export class AuthController {
     private usersService: UsersService,
   ) {}
 
-  private frontendUrl() {
-    const configured =
-      process.env.FRONTEND_URL ||
-      process.env.FRONTEND_ORIGIN ||
-      process.env.FRONTEND_ORIGINS?.split(',')[0] ||
-      'http://localhost:3000';
-    return configured.trim().replace(/\/$/, '');
-  }
-
   private setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
     res.cookie(
       'access_token',
       accessToken,
-      this.authService.cookieOptions(5 * 60 * 60 * 1000),
+      this.authService.cookieOptions(this.authService.accessCookieMaxAge()),
     );
     res.cookie(
       'refresh_token',
       refreshToken,
-      this.authService.cookieOptions(7 * 24 * 60 * 60 * 1000),
+      this.authService.cookieOptions(this.authService.refreshCookieMaxAge()),
     );
+  }
+
+  private clearAuthCookies(res: Response) {
+    const options = this.authService.cookieOptions();
+    res.clearCookie('access_token', options);
+    res.clearCookie('refresh_token', options);
   }
 
   @Post('login')
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const user = await this.authService.validateUser(dto.email, dto.password);
+    this.clearAuthCookies(res);
+    return this.authService.beginMfaLogin(user);
+  }
+
+  @Post('mfa/verify')
+  async verifyMfa(@Body() dto: MfaVerifyDto, @Res({ passthrough: true }) res: Response) {
+    const { user, recoveryCodes } = await this.authService.verifyMfa(
+      dto.challengeToken,
+      dto.code,
+    );
     const { accessToken, refreshToken } = await this.authService.signTokens(user);
-
     this.setAuthCookies(res, accessToken, refreshToken);
-
     return {
       id: user._id,
+      userId: user.userId,
       name: user.name,
       email: user.email,
       role: user.role,
+      mfaEnabled: true,
+      ...(recoveryCodes ? { recoveryCodes } : {}),
     };
   }
 
   @Post('logout')
   logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('access_token', { path: '/' });
-    res.clearCookie('refresh_token', { path: '/' });
+    this.clearAuthCookies(res);
     return { message: 'Logged out' };
   }
 
@@ -79,18 +87,17 @@ export class AuthController {
       const payload = await this.jwtService.verifyAsync(token, {
         secret: process.env.JWT_REFRESH_SECRET,
       });
-      const { accessToken } = await this.authService.signTokens({
-        _id: payload.sub,
-        name: payload.name,
-        role: payload.role,
-      });
-      res.cookie(
-        'access_token',
-        accessToken,
-        this.authService.cookieOptions(5 * 60 * 60 * 1000),
-      );
+      if (payload.tokenType !== 'refresh' || payload.mfaVerified !== true) {
+        throw new Error('Invalid token type');
+      }
+      const user = await this.usersService.findById(payload.sub);
+      if (user.isActive === false) throw new Error('Account is inactive');
+      if (user.mfaEnabled !== true) throw new Error('MFA enrollment required');
+      const { accessToken, refreshToken } = await this.authService.signTokens(user);
+      this.setAuthCookies(res, accessToken, refreshToken);
       return { message: 'Refreshed' };
     } catch {
+      this.clearAuthCookies(res);
       throw new UnauthorizedException('Refresh token invalid or expired');
     }
   }
@@ -104,11 +111,13 @@ export class AuthController {
       : await this.usersService.getReportContext(user.id).catch(() => null);
     return {
       id: user._id,
+      userId: user.userId,
       name: user.name,
       email: user.email,
       role: user.role,
       assignedAdminId: user.assignedAdminId,
       teamName: reportContext?.teamName || user.teamName,
+      mfaEnabled: user.mfaEnabled === true,
       permissions: req.user.permissions,
     };
   }
@@ -126,6 +135,7 @@ export class AuthController {
 
     return {
       id: updated._id,
+      userId: updated.userId,
       name: updated.name,
       email: updated.email,
       role: updated.role,
