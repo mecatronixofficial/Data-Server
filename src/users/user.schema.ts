@@ -11,6 +11,9 @@ export class User {
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email: string;
 
+  @Prop({ trim: true, maxlength: 2000, default: '' })
+  message?: string;
+
   // Human-readable login id. userIdKey enforces case-insensitive uniqueness.
   @Prop({ trim: true })
   userId?: string;

@@ -34,7 +34,18 @@ export class AuthService {
     return this.usersService.getOwnMfaSettings(actorId);
   }
 
-  updateMfaPolicy(enabled: boolean, actorId: string) {
+  async updateMfaPolicy(enabled: boolean, actorId: string, code?: string) {
+    if (!enabled) {
+      const account = await this.usersService.findByIdForMfa(actorId);
+      if (account.role !== 'superadmin' || !account.mfaEnabled || !account.mfaSecretEncrypted) {
+        throw new UnauthorizedException('An active authenticator is required to turn off MFA');
+      }
+
+      const step = this.verifyTotp(this.decryptSecret(account.mfaSecretEncrypted), code || '');
+      if (step === null) throw new UnauthorizedException('Invalid authenticator code');
+      await this.usersService.recordMfaTotpUse(actorId, step);
+    }
+
     return this.usersService.updateOwnMfaSettings(actorId, enabled);
   }
 
