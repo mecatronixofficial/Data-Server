@@ -82,10 +82,16 @@ async function bootstrap() {
   });
 
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.method !== 'POST' || req.path !== '/auth/mfa/verify') return next();
+    const verifiesLogin = req.method === 'POST' && req.path === '/auth/mfa/verify';
+    const disablesMfa = req.method === 'PUT'
+      && req.path === '/auth/mfa/settings'
+      && req.body?.enabled === false;
+    if (!verifiesLogin && !disablesMfa) return next();
     const now = Date.now();
-    const challenge = typeof req.body?.challengeToken === 'string' ? req.body.challengeToken : '';
-    const challengeKey = createHash('sha256').update(challenge).digest('hex');
+    const verificationCredential = verifiesLogin
+      ? (typeof req.body?.challengeToken === 'string' ? req.body.challengeToken : '')
+      : (typeof req.cookies?.access_token === 'string' ? req.cookies.access_token : '');
+    const challengeKey = createHash('sha256').update(verificationCredential).digest('hex');
     const key = `${req.ip}|${challengeKey}`;
     const current = mfaAttempts.get(key);
     const attempt = !current || current.resetAt <= now

@@ -83,6 +83,7 @@ export class AuthController {
       userId: user.userId,
       name: user.name,
       email: user.email,
+      message: user.message || '',
       role: user.role,
       mfaEnabled: true,
       ...(recoveryCodes ? { recoveryCodes } : {}),
@@ -139,6 +140,7 @@ export class AuthController {
       userId: user.userId,
       name: user.name,
       email: user.email,
+      message: user.message || '',
       role: user.role,
       assignedAdminId: user.assignedAdminId,
       teamName: reportContext?.teamName || user.teamName,
@@ -158,7 +160,7 @@ export class AuthController {
   @RequirePermissions('manageUsers')
   @Put('mfa/settings')
   updateMfaSettings(@Body() dto: UpdateMfaPolicyDto, @Req() req: any) {
-    return this.authService.updateMfaPolicy(dto.enabled, req.user.sub);
+    return this.authService.updateMfaPolicy(dto.enabled, req.user.sub, dto.code);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -177,6 +179,7 @@ export class AuthController {
       userId: updated.userId,
       name: updated.name,
       email: updated.email,
+      message: updated.message || '',
       role: updated.role,
     };
   }

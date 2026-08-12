@@ -448,7 +448,7 @@ export class UsersService implements OnApplicationBootstrap {
     };
   }
 
-  async updateProfile(id: string, dto: { name?: string; email?: string; teamName?: string }) {
+  async updateProfile(id: string, dto: { name?: string; email?: string; message?: string; teamName?: string }) {
     const user = await this.userModel.findById(id).select('+teamNameKey');
     if (!user) throw new NotFoundException('User not found');
 
@@ -461,6 +461,7 @@ export class UsersService implements OnApplicationBootstrap {
       }
     }
     if (dto.name) user.name = dto.name.trim();
+    if (dto.message !== undefined) user.message = dto.message.trim();
     let teamNameToSync: string | null = null;
     if (dto.teamName !== undefined) {
       if (user.role !== 'admin') {

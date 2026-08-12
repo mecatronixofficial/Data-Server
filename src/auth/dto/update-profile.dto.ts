@@ -11,4 +11,9 @@ export class UpdateProfileDto {
   @IsEmail()
   @MaxLength(254)
   email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  message?: string;
 }
