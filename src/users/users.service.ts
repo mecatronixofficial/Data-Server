@@ -177,14 +177,14 @@ export class UsersService implements OnApplicationBootstrap {
   }
 
   async findAll() {
-    return this.userModel.find().select('-password').sort({ createdAt: -1 });
+    return this.userModel.find().select('-password').sort({ createdAt: -1 }).lean();
   }
 
   // Ids of the 'user' accounts assigned to a given admin — used to scope an
   // admin's report view to their own team instead of every account.
   async findTeamMemberIds(adminId: string): Promise<string[]> {
-    const users = await this.userModel.find({ assignedAdminId: adminId }).select('_id');
-    return users.map((user) => user.id);
+    const users = await this.userModel.find({ assignedAdminId: adminId }).select('_id').lean();
+    return users.map((user) => String(user._id));
   }
 
   async getReportContext(accountId: string) {

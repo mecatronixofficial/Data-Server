@@ -81,6 +81,12 @@ function validateEnvironment(config: Record<string, unknown>) {
       throw new Error(`${key} must be a non-negative integer`);
     }
   }
+  if (config.COMPRESSION_THRESHOLD_BYTES !== undefined) {
+    const threshold = Number(config.COMPRESSION_THRESHOLD_BYTES);
+    if (!Number.isFinite(threshold) || threshold < 0) {
+      throw new Error('COMPRESSION_THRESHOLD_BYTES must be a non-negative number');
+    }
+  }
   const maxPoolSize = Number(config.MONGODB_MAX_POOL_SIZE || 20);
   const minPoolSize = Number(config.MONGODB_MIN_POOL_SIZE || 1);
   if (maxPoolSize < 1 || minPoolSize > maxPoolSize) {

@@ -20,7 +20,8 @@ export class RecordsService {
       .sort({ createdAt: -1 })
       .populate('fields.fieldId', 'name')
       .populate('fields.userId', 'name')
-      .populate('adminIds', 'name');
+      .populate('adminIds', 'name')
+      .lean();
   }
 
   // An admin sees every record they supervise, with all of its fields/users intact —
@@ -33,15 +34,17 @@ export class RecordsService {
       .sort({ createdAt: -1 })
       .populate('fields.fieldId', 'name')
       .populate('fields.userId', 'name')
-      .populate('adminIds', 'name');
+      .populate('adminIds', 'name')
+      .lean();
 
     if (role === 'admin') return records;
 
-    return records.map((record) => {
-      const plain = record.toObject();
-      plain.fields = plain.fields.filter((f: any) => String(f.userId?._id ?? f.userId) === userId);
-      return plain;
-    });
+    return records.map((record) => ({
+      ...record,
+      fields: record.fields.filter(
+        (field: any) => String(field.userId?._id ?? field.userId) === userId,
+      ),
+    }));
   }
 
   private async assertFieldsExist(fieldIds: string[]) {

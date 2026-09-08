@@ -10,7 +10,7 @@ export class ReportSettingsService {
   ) {}
 
   async getSettings() {
-    const settings = await this.reportSettingsModel.findOne();
+    const settings = await this.reportSettingsModel.findOne().lean();
     return { visibleColumns: settings?.visibleColumns ?? null };
   }
 
