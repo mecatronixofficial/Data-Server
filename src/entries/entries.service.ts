@@ -593,7 +593,7 @@ export class EntriesService {
     const context = await this.usersService.getReportContext(actor.sub);
     const active = await this.entryModel.findOne({
       teamAdminId: new Types.ObjectId(context.teamAdminId),
-    });
+    }).lean();
     if (!active) return null;
     return active;
   }
@@ -605,7 +605,7 @@ export class EntriesService {
     const activePromise = context
       ? this.entryModel.findOne({
           teamAdminId: new Types.ObjectId(context.teamAdminId),
-        })
+        }).lean()
       : Promise.resolve(null);
     const [fields, finalTotalSettings, activeEntry] = await Promise.all([
       this.fieldsService.findAll(actor),
@@ -665,7 +665,8 @@ export class EntriesService {
       .populate('createdBy', 'name email role')
       .populate('updatedBy', 'name email role')
       .populate('history.updatedBy', 'name email role')
-      .sort({ date: -1 });
+      .sort({ date: -1 })
+      .lean();
   }
 
   private buildFilter(query: ReportQuery) {
@@ -703,7 +704,8 @@ export class EntriesService {
       .findById(id)
       .populate('createdBy', 'name email role')
       .populate('updatedBy', 'name email role')
-      .populate('history.updatedBy', 'name email role');
+      .populate('history.updatedBy', 'name email role')
+      .lean();
     if (!entry) throw new NotFoundException('Entry not found');
     const actorContext = actor.role === 'superadmin'
       ? null
@@ -881,9 +883,11 @@ export class EntriesService {
     const filter = await this.scopeFilterForActor(this.buildFilter(query), actor, query);
     const entries = await this.entryModel
       .find(filter)
+      .select('-history -fields.details -fields.boxFields')
       .populate('createdBy', 'name email')
       .populate('updatedBy', 'name email')
-      .sort({ date: -1 });
+      .sort({ date: -1 })
+      .lean();
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Entries');
@@ -935,8 +939,9 @@ export class EntriesService {
     const filter = await this.scopeFilterForActor(this.buildFilter(query), actor, query);
     const entries = await this.entryModel
       .find(filter)
-      .populate('createdBy', 'name email')
-      .sort({ date: -1 });
+      .select('-history -fields.details -fields.boxFields -createdBy -updatedBy')
+      .sort({ date: -1 })
+      .lean();
 
     const escapePdf = (value: unknown) => String(value ?? '')
       .replace(/\\/g, '\\\\')

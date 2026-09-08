@@ -35,3 +35,8 @@ export class RecordEntry {
 }
 
 export const RecordEntrySchema = SchemaFactory.createForClass(RecordEntry);
+// These match the two role-scoped list queries and preserve their newest-first
+// ordering without an in-memory MongoDB sort.
+RecordEntrySchema.index({ adminIds: 1, createdAt: -1 });
+RecordEntrySchema.index({ 'fields.userId': 1, createdAt: -1 });
+RecordEntrySchema.index({ createdAt: -1 });

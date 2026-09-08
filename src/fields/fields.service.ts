@@ -33,7 +33,7 @@ export class FieldsService {
   ) {}
 
   async getFinalTotalSettings(): Promise<{ label: string; icon: string; sign: 'add' | 'subtract' }> {
-    const settings = await this.finalTotalSettingsModel.findOne();
+    const settings = await this.finalTotalSettingsModel.findOne().lean();
     return {
       label: settings?.label || 'Final Total',
       icon: settings?.icon || '',
@@ -54,7 +54,7 @@ export class FieldsService {
   // resolution, migrations) which must always see every field regardless of who
   // triggered them. Pass it only from request-driven reads.
   async findAll(viewer?: { sub?: string; permissions?: Record<string, boolean> }) {
-    const fields = await this.fieldModel.find().sort({ order: 1, createdAt: 1 });
+    const fields = await this.fieldModel.find().sort({ order: 1, createdAt: 1 }).lean();
     if (!viewer || viewer.permissions?.manageFields) return fields;
     return fields.filter((field) => this.isVisibleTo(field, viewer.sub));
   }
@@ -69,7 +69,7 @@ export class FieldsService {
 
   // Lightweight, name-keyed lock map available to any authenticated account.
   async findEditLocks() {
-    const fields = await this.fieldModel.find().select('name userOnlyEdit');
+    const fields = await this.fieldModel.find().select('name userOnlyEdit').lean();
     return fields.map((field) => ({ name: field.name, userOnlyEdit: field.userOnlyEdit }));
   }
 

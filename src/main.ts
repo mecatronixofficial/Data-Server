@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import { createHash } from 'crypto';
 import { json, NextFunction, Request, Response, urlencoded } from 'express';
 import { AppModule } from './app.module';
@@ -42,6 +43,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   const allowedOrigins = getAllowedOrigins();
   const isProduction = process.env.NODE_ENV === 'production';
+  const configuredCompressionThreshold = Number(process.env.COMPRESSION_THRESHOLD_BYTES || 1024);
+  const compressionThreshold = Number.isFinite(configuredCompressionThreshold)
+    && configuredCompressionThreshold >= 0
+    ? configuredCompressionThreshold
+    : 1024;
 
   app.getHttpAdapter().getInstance().disable('x-powered-by');
   if (isProduction) {
@@ -50,6 +56,9 @@ async function bootstrap() {
 
   app.use(json({ limit: process.env.REQUEST_BODY_LIMIT || '1mb' }));
   app.use(urlencoded({ extended: false, limit: process.env.REQUEST_BODY_LIMIT || '1mb' }));
+  app.use(compression({
+    threshold: compressionThreshold,
+  }));
 
   app.use(cookieParser());
 
